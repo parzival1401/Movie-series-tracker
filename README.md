@@ -1,41 +1,50 @@
 # movie-rec
 
-Personal movie and TV series tracker with AI recommendations.
+Personal movie and TV tracker with AI recommendations. Runs on a Raspberry Pi via Docker.
 
-## Requirements
-
-- Docker + Docker Compose
-- TMDB API bearer token
-- Gemini API key
-
-## Setup
+## First-time setup on Pi
 
 ```bash
+git clone https://github.com/parzival1401/Movie-series-tracker.git
+cd Movie-series-tracker
 cp .env.example .env
-# fill in TMDB_BEARER_TOKEN and GEMINI_API_KEY in .env
 ```
 
-## Run locally (Mac)
+Fill in `.env`:
+- `TMDB_BEARER_TOKEN` — get at themoviedb.org/settings/api
+- `GEMINI_API_KEY` — get at aistudio.google.com
 
 ```bash
-docker compose up --build
+mkdir data
+chmod +x deploy.sh
+./deploy.sh
 ```
 
-App available at http://localhost:8000
+## Import existing watched titles
 
-## Deploy to Raspberry Pi
+Create `watched.csv` in the project root:
+
+```
+title,type,year,rating,seasons_watched,notes
+Inception,movie,2010,9,,
+Breaking Bad,series,2008,10,"1,2,3,4,5",
+```
 
 ```bash
-git pull
-docker compose up --build -d
+# Dry run first
+docker compose exec movie-rec python scripts/import_csv.py --dry-run
+
+# Then import
+docker compose exec movie-rec python scripts/import_csv.py
 ```
 
-App available via Tailscale at http://100.77.67.90:8000
+## Daily usage
 
-## Import existing data
+- Access at http://100.77.67.90:8000 from any device on Tailscale
+- Updates: `git push` from Mac, then `./deploy.sh` on Pi
 
-```bash
-python scripts/import_csv.py path/to/data.csv
-```
+## Updating your taste profile
 
-CSV columns: `tmdb_id, media_type, title, poster_path, rating, notes, watched_at`
+- Edit `TASTE_PROFILE` in `app/gemini.py`
+- Redeploy with `./deploy.sh`
+- Go to `/recommendations` and click Refresh
