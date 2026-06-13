@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Search — MovieRec{% endblock %}
+{% block content %}
+<h2 class="text-2xl font-bold mb-6">Search</h2>
+<form method="get" action="/search" class="flex gap-2 mb-8">
+    <input
+        type="text"
+        name="q"
+        value="{{ query or '' }}"
+        placeholder="Search movies or TV shows…"
+        class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500"
+    />
+    <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 px-5 py-2 rounded-lg text-sm font-medium">Search</button>
+</form>
+{% if results is defined %}
+    {% if results %}
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        {% for item in results %}
+        <div class="bg-gray-900 rounded-xl overflow-hidden border border-gray-800">
+            {% if item.poster_path %}
+            <img src="https://image.tmdb.org/t/p/w342{{ item.poster_path }}" alt="{{ item.title or item.name }}" class="w-full" />
+            {% else %}
+            <div class="w-full h-48 bg-gray-800 flex items-center justify-center text-gray-600 text-xs">No image</div>
+            {% endif %}
+            <div class="p-3">
+                <p class="text-sm font-semibold truncate">{{ item.title or item.name }}</p>
+                <p class="text-xs text-gray-500">{{ item.media_type | upper }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-gray-500">No results found.</p>
+    {% endif %}
+{% endif %}
+{% endblock %}

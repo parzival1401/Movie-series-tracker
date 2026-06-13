@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Recommendations — MovieRec{% endblock %}
+{% block content %}
+<h2 class="text-2xl font-bold mb-6">Recommendations</h2>
+{% if recommendations %}
+<div class="bg-gray-900 border border-gray-800 rounded-xl p-6 prose prose-invert max-w-none text-sm leading-relaxed whitespace-pre-wrap">{{ recommendations }}</div>
+{% else %}
+<p class="text-gray-500">No recommendations yet. Add movies to your library first.</p>
+{% endif %}
+{% endblock %}

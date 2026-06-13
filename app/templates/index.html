@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Home — MovieRec{% endblock %}
+{% block content %}
+<div class="text-center mt-20">
+    <h1 class="text-4xl font-bold text-indigo-400 mb-4">MovieRec</h1>
+    <p class="text-gray-400 mb-8">Your personal movie and TV tracker.</p>
+    <div class="flex justify-center gap-4">
+        <a href="/search" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-lg text-sm font-medium">Search</a>
+        <a href="/library" class="bg-gray-700 hover:bg-gray-600 text-white px-5 py-2 rounded-lg text-sm font-medium">Library</a>
+        <a href="/recommendations" class="bg-gray-700 hover:bg-gray-600 text-white px-5 py-2 rounded-lg text-sm font-medium">Recommendations</a>
+    </div>
+</div>
+{% endblock %}
