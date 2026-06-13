@@ -5,6 +5,7 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+      - ./watched.csv:/app/watched.csv:ro
     env_file: .env
     restart: unless-stopped
     mem_limit: 256m
