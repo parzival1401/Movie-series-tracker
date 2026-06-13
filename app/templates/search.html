@@ -1,36 +1,135 @@
 {% extends "base.html" %}
 {% block title %}Search — MovieRec{% endblock %}
 {% block content %}
-<h2 class="text-2xl font-bold mb-6">Search</h2>
-<form method="get" action="/search" class="flex gap-2 mb-8">
-    <input
-        type="text"
-        name="q"
-        value="{{ query or '' }}"
-        placeholder="Search movies or TV shows…"
-        class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500"
-    />
-    <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 px-5 py-2 rounded-lg text-sm font-medium">Search</button>
-</form>
-{% if results is defined %}
-    {% if results %}
-    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-        {% for item in results %}
-        <div class="bg-gray-900 rounded-xl overflow-hidden border border-gray-800">
-            {% if item.poster_path %}
-            <img src="https://image.tmdb.org/t/p/w342{{ item.poster_path }}" alt="{{ item.title or item.name }}" class="w-full" />
-            {% else %}
-            <div class="w-full h-48 bg-gray-800 flex items-center justify-center text-gray-600 text-xs">No image</div>
-            {% endif %}
-            <div class="p-3">
-                <p class="text-sm font-semibold truncate">{{ item.title or item.name }}</p>
-                <p class="text-xs text-gray-500">{{ item.media_type | upper }}</p>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <p class="text-gray-500">No results found.</p>
-    {% endif %}
-{% endif %}
+
+<h1 class="text-2xl font-bold mb-6">Search</h1>
+
+<div class="flex flex-col sm:flex-row gap-3 mb-8">
+  <input id="q" type="text" placeholder="Title name…"
+         class="flex-1 bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-white/40"
+         onkeydown="if(event.key==='Enter') doSearch()" />
+  <div class="flex gap-2">
+    <button id="btn-movie" onclick="setType('movie')"
+            class="px-4 py-2 rounded-xl text-sm font-medium border bg-white text-black border-white transition">
+      Movie
+    </button>
+    <button id="btn-series" onclick="setType('series')"
+            class="px-4 py-2 rounded-xl text-sm font-medium border border-white/20 text-gray-400 hover:text-white transition">
+      Series
+    </button>
+    <button onclick="doSearch()"
+            class="px-5 py-2 rounded-xl text-sm font-medium bg-white text-black hover:bg-gray-200 transition">
+      Search
+    </button>
+  </div>
+</div>
+
+<div id="results" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+<p id="empty-msg" class="hidden text-gray-500 text-sm">No results found.</p>
+
+<script>
+let currentType = 'movie';
+
+function setType(t) {
+  currentType = t;
+  const active = 'px-4 py-2 rounded-xl text-sm font-medium border bg-white text-black border-white transition';
+  const inactive = 'px-4 py-2 rounded-xl text-sm font-medium border border-white/20 text-gray-400 hover:text-white transition';
+  document.getElementById('btn-movie').className = t === 'movie' ? active : inactive;
+  document.getElementById('btn-series').className = t === 'series' ? active : inactive;
+}
+
+async function doSearch() {
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${currentType}`);
+  const data = await res.json();
+  renderResults(data);
+}
+
+function renderResults(items) {
+  const container = document.getElementById('results');
+  const empty = document.getElementById('empty-msg');
+  container.innerHTML = '';
+  if (!items.length) { empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+
+  items.forEach(item => {
+    const overview = item.overview ? item.overview.slice(0, 100) + (item.overview.length > 100 ? '…' : '') : '';
+    const poster = item.poster_url
+      ? `<img src="${item.poster_url}" class="w-full aspect-[2/3] object-cover" />`
+      : `<div class="w-full aspect-[2/3] bg-[#2a2a2a] flex items-center justify-center"><span class="text-gray-500 text-xs px-2 text-center">${escHtml(item.title)}</span></div>`;
+
+    const card = document.createElement('div');
+    card.className = 'bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden flex flex-col';
+    card.innerHTML = `
+      ${poster}
+      <div class="p-3 flex flex-col gap-2 flex-1">
+        <p class="font-semibold text-sm">${escHtml(item.title)}</p>
+        <p class="text-xs text-gray-500">${item.year || ''} · ${escHtml(item.genres || '')}</p>
+        ${overview ? `<p class="text-xs text-gray-400 leading-relaxed">${escHtml(overview)}</p>` : ''}
+        <button class="add-btn mt-auto text-xs bg-white text-black font-medium py-1.5 rounded-lg hover:bg-gray-200 transition">
+          + Add to Library
+        </button>
+        <div class="add-form hidden"></div>
+      </div>`;
+
+    const btn = card.querySelector('.add-btn');
+    btn.addEventListener('click', () => toggleAddForm(btn, item));
+    container.appendChild(card);
+  });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleAddForm(btn, item) {
+  const formDiv = btn.nextElementSibling;
+  if (!formDiv.classList.contains('hidden')) { formDiv.classList.add('hidden'); return; }
+  formDiv.classList.remove('hidden');
+  formDiv.innerHTML = buildFormHtml(item, currentType);
+  formDiv.querySelector('form').addEventListener('submit', e => submitAdd(e, formDiv.querySelector('form')));
+}
+
+function buildFormHtml(item, type) {
+  return `
+    <form class="flex flex-col gap-2 mt-1">
+      <input type="hidden" name="tmdb_id" value="${item.tmdb_id}" />
+      <input type="hidden" name="title" value="${escHtml(item.title)}" />
+      <input type="hidden" name="type" value="${type}" />
+      <input type="hidden" name="year" value="${item.year || ''}" />
+      <input type="hidden" name="poster_url" value="${item.poster_url || ''}" />
+      <input type="hidden" name="genres" value="${escHtml(item.genres || '')}" />
+      <label class="text-xs text-gray-400">Rating (1-10)
+        <input type="number" name="rating" min="1" max="10"
+               class="w-full mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+      </label>
+      ${type === 'series' ? `<label class="text-xs text-gray-400">Seasons watched (e.g. 1,2,3)
+        <input type="text" name="seasons_watched"
+               class="w-full mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+      </label>` : '<input type="hidden" name="seasons_watched" value="" />'}
+      <label class="text-xs text-gray-400">Notes
+        <textarea name="notes" rows="2"
+                  class="w-full mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-1.5 text-sm focus:outline-none resize-none"></textarea>
+      </label>
+      <button type="submit" class="text-xs bg-white text-black font-medium py-1.5 rounded-lg hover:bg-gray-200 transition">Save</button>
+      <p class="status text-xs text-center"></p>
+    </form>`;
+}
+
+async function submitAdd(e, form) {
+  e.preventDefault();
+  const status = form.querySelector('.status');
+  const res = await fetch('/add', { method: 'POST', body: new FormData(form), redirect: 'manual' });
+  if (res.status === 0 || res.ok || res.status === 303) {
+    status.textContent = '✓ Added to library';
+    status.className = 'status text-xs text-center text-green-400';
+    form.querySelectorAll('input,textarea,button[type=submit]').forEach(el => el.disabled = true);
+  } else {
+    status.textContent = 'Already in library.';
+    status.className = 'status text-xs text-center text-red-400';
+  }
+}
+</script>
+
 {% endblock %}

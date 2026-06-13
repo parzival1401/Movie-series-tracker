@@ -1,10 +1,95 @@
 {% extends "base.html" %}
 {% block title %}Recommendations — MovieRec{% endblock %}
 {% block content %}
-<h2 class="text-2xl font-bold mb-6">Recommendations</h2>
-{% if recommendations %}
-<div class="bg-gray-900 border border-gray-800 rounded-xl p-6 prose prose-invert max-w-none text-sm leading-relaxed whitespace-pre-wrap">{{ recommendations }}</div>
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold">Recommendations</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      {% if last_date %}Last updated: {{ last_date }}{% else %}Never generated{% endif %}
+    </p>
+  </div>
+  <form method="post" action="/recommendations/refresh">
+    <button type="submit"
+            class="text-sm bg-white text-black font-medium px-4 py-2 rounded-xl hover:bg-gray-200 transition">
+      ↺ Refresh
+    </button>
+  </form>
+</div>
+
+{% if recs %}
+<div class="flex flex-col gap-4">
+  {% for rec in recs %}
+  <div id="rec-{{ rec.id }}"
+       class="bg-[#1a1a1a] border border-white/10 rounded-xl flex gap-4 p-4 transition-opacity duration-500{% if rec.seen %} opacity-40{% endif %}">
+
+    <!-- Rank -->
+    <div class="flex-none w-7 text-center pt-1">
+      <span class="text-xl font-bold text-gray-600">{{ loop.index }}</span>
+    </div>
+
+    <!-- Poster -->
+    {% if rec.poster_url %}
+    <img src="{{ rec.poster_url }}" alt="{{ rec.title }}"
+         class="flex-none w-16 rounded-lg aspect-[2/3] object-cover" />
+    {% else %}
+    <div class="flex-none w-16 rounded-lg aspect-[2/3] bg-[#2a2a2a] flex items-center justify-center">
+      <span class="text-gray-600 text-xs text-center px-1">{{ rec.title }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Info -->
+    <div class="flex-1 min-w-0">
+      <div class="flex items-start justify-between gap-2 mb-1">
+        <p class="font-semibold text-sm leading-tight">{{ rec.title }}</p>
+        <span class="flex-none text-xs bg-yellow-400/20 text-yellow-300 px-2 py-0.5 rounded font-medium whitespace-nowrap">
+          {{ "%.1f"|format(rec.score) }}
+        </span>
+      </div>
+      <p class="text-xs text-gray-500 mb-1">
+        {{ rec.year or '' }}{% if rec.genres %} · {{ rec.genres }}{% endif %}
+      </p>
+      {% if rec.reason %}
+      <p class="text-xs text-gray-400 leading-relaxed">{{ rec.reason }}</p>
+      {% endif %}
+    </div>
+
+    <!-- Action -->
+    <div class="flex-none self-center">
+      {% if not rec.seen %}
+      <button onclick="markSeen({{ rec.id }})"
+              class="text-xs text-gray-500 hover:text-white border border-white/10 hover:border-white/30 px-3 py-1.5 rounded-lg transition whitespace-nowrap">
+        Seen it
+      </button>
+      {% else %}
+      <span class="text-xs text-gray-600">Seen</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
 {% else %}
-<p class="text-gray-500">No recommendations yet. Add movies to your library first.</p>
+<div class="text-center py-20 text-gray-500">
+  <p class="text-lg mb-2">No recommendations yet.</p>
+  <p class="text-sm">Add more titles to your library to get started.</p>
+  <a href="/search" class="mt-4 inline-block text-white underline text-sm">Search for titles →</a>
+</div>
 {% endif %}
+
+<script>
+async function markSeen(id) {
+  const res = await fetch(`/recommendations/seen/${id}`, { method: 'POST' });
+  if (res.ok) {
+    const card = document.getElementById(`rec-${id}`);
+    card.style.opacity = '0.4';
+    const btn = card.querySelector('button');
+    const span = document.createElement('span');
+    span.className = 'text-xs text-gray-600';
+    span.textContent = 'Seen';
+    btn.replaceWith(span);
+  }
+}
+</script>
+
 {% endblock %}

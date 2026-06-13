@@ -1,24 +1,102 @@
 {% extends "base.html" %}
 {% block title %}Library — MovieRec{% endblock %}
 {% block content %}
-<h2 class="text-2xl font-bold mb-6">Library</h2>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">Library</h1>
+  <a href="/search"
+     class="text-sm bg-white text-black font-medium px-4 py-2 rounded-lg hover:bg-gray-200 transition">
+    + Add title
+  </a>
+</div>
+
+{% if error == 'duplicate' %}
+<div class="mb-4 bg-red-900/40 border border-red-600/40 text-red-300 text-sm px-4 py-3 rounded-lg">
+  That title is already in your library.
+</div>
+{% endif %}
+
+<!-- Filter bar -->
+<div class="flex gap-2 mb-6 text-sm">
+  <a href="/library"
+     class="px-4 py-1.5 rounded-full border transition
+            {% if not current_filter %}bg-white text-black border-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
+    All
+  </a>
+  <a href="/library?filter=movie"
+     class="px-4 py-1.5 rounded-full border transition
+            {% if current_filter == 'movie' %}bg-white text-black border-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
+    Movies
+  </a>
+  <a href="/library?filter=series"
+     class="px-4 py-1.5 rounded-full border transition
+            {% if current_filter == 'series' %}bg-white text-black border-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
+    Series
+  </a>
+</div>
+
 {% if items %}
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-    {% for item in items %}
-    <div class="bg-gray-900 rounded-xl overflow-hidden border border-gray-800">
-        {% if item.poster_path %}
-        <img src="https://image.tmdb.org/t/p/w342{{ item.poster_path }}" alt="{{ item.title }}" class="w-full" />
-        {% else %}
-        <div class="w-full h-48 bg-gray-800 flex items-center justify-center text-gray-600 text-xs">No image</div>
-        {% endif %}
-        <div class="p-3">
-            <p class="text-sm font-semibold truncate">{{ item.title }}</p>
-            <p class="text-xs text-gray-500">{{ item.media_type | upper }} · {% if item.rating %}{{ item.rating }}/10{% else %}Unrated{% endif %}</p>
-        </div>
+  {% for item in items %}
+  <div id="card-{{ item.id }}" class="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden flex flex-col">
+
+    {% if item.poster_url %}
+    <img src="{{ item.poster_url }}" alt="{{ item.title }}"
+         class="w-full aspect-[2/3] object-cover" />
+    {% else %}
+    <div class="w-full aspect-[2/3] bg-[#2a2a2a] flex items-center justify-center">
+      <span class="text-gray-500 text-xs text-center px-2">{{ item.title }}</span>
     </div>
-    {% endfor %}
+    {% endif %}
+
+    <div class="p-3 flex flex-col gap-2 flex-1">
+      <p class="font-semibold text-sm leading-tight">{{ item.title }}</p>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        {% if item.year %}<span class="text-xs text-gray-500">{{ item.year }}</span>{% endif %}
+        {% if item.rating %}
+        <span class="text-xs bg-yellow-400/20 text-yellow-300 px-1.5 py-0.5 rounded font-medium">
+          ★ {{ item.rating }}/10
+        </span>
+        {% endif %}
+        <span class="text-xs bg-white/10 text-gray-300 px-1.5 py-0.5 rounded capitalize">{{ item.type }}</span>
+      </div>
+
+      {% if item.genres %}
+      <p class="text-xs text-gray-500 leading-tight">{{ item.genres }}</p>
+      {% endif %}
+
+      <div class="flex gap-2 mt-auto pt-2">
+        {% if item.tmdb_id %}
+        <a href="/similar/{{ item.tmdb_id }}/{{ item.type }}"
+           class="flex-1 text-center text-xs bg-white/10 hover:bg-white/20 px-2 py-1.5 rounded-lg transition">
+          Similar
+        </a>
+        {% endif %}
+        <button onclick="removeCard({{ item.id }})"
+                class="flex-1 text-xs bg-red-900/40 hover:bg-red-800/60 text-red-300 px-2 py-1.5 rounded-lg transition">
+          Remove
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
 </div>
 {% else %}
-<p class="text-gray-500">Your library is empty. <a href="/search" class="text-indigo-400 hover:underline">Search</a> for something to add.</p>
+<div class="text-center py-20 text-gray-500">
+  <p class="text-lg mb-3">Nothing here yet.</p>
+  <a href="/search" class="text-white underline text-sm">Search for something to add →</a>
+</div>
 {% endif %}
+
+<script>
+async function removeCard(id) {
+  if (!confirm('Remove from library?')) return;
+  const res = await fetch(`/watched/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    document.getElementById(`card-${id}`).remove();
+  }
+}
+</script>
+
 {% endblock %}
