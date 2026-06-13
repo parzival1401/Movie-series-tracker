@@ -32,12 +32,11 @@ def index(request: Request):
     movie_count = sum(1 for w in all_watched if w["type"] == "movie")
     series_count = sum(1 for w in all_watched if w["type"] == "series")
     recent = all_watched[:5]
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "movie_count": movie_count,
-        "series_count": series_count,
-        "recent": recent,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={"movie_count": movie_count, "series_count": series_count, "recent": recent},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -49,12 +48,11 @@ def library(request: Request, filter: str | None = None, error: str | None = Non
     if filter not in ("movie", "series"):
         filter = None
     items = db.get_all_watched(filter_type=filter)
-    return templates.TemplateResponse("library.html", {
-        "request": request,
-        "items": items,
-        "current_filter": filter,
-        "error": error,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="library.html",
+        context={"items": items, "current_filter": filter, "error": error},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +61,7 @@ def library(request: Request, filter: str | None = None, error: str | None = Non
 
 @app.get("/search")
 def search(request: Request):
-    return templates.TemplateResponse("search.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="search.html", context={})
 
 
 @app.get("/api/search")
@@ -125,11 +123,11 @@ def similar(request: Request, tmdb_id: int, media_type: str):
     results = tmdb.get_recommendations(tmdb_id, media_type)
     results = [r for r in results if r["tmdb_id"] not in watched_ids]
     source = tmdb.get_details(tmdb_id, media_type) or {}
-    return templates.TemplateResponse("similar.html", {
-        "request": request,
-        "source_title": source,
-        "results": results,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="similar.html",
+        context={"source_title": source, "results": results},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +140,6 @@ def _build_and_save_recs():
     candidates = gemini.aggregate_tmdb_recs(watched, tmdb.get_recommendations)
     candidates = [c for c in candidates if c["tmdb_id"] not in watched_ids]
     final = gemini.rerank_recommendations(watched, candidates)
-    # Enrich poster_url from candidates if Gemini dropped it
     candidate_map = {c["tmdb_id"]: c for c in candidates}
     for item in final:
         if not item.get("poster_url"):
@@ -157,11 +154,11 @@ def recommendations(request: Request):
         _build_and_save_recs()
     recs = db.get_recommendations()
     last_date = db.get_last_rec_date()
-    return templates.TemplateResponse("recommendations.html", {
-        "request": request,
-        "recs": recs,
-        "last_date": last_date,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="recommendations.html",
+        context={"recs": recs, "last_date": last_date},
+    )
 
 
 @app.post("/recommendations/refresh")
