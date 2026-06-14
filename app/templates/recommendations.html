@@ -32,9 +32,14 @@
 <div class="flex items-start justify-between mb-4">
   <div>
     <h1 class="text-2xl font-bold">Recommendations</h1>
-    <p class="text-sm text-gray-500 mt-1">
-      {% if last_date %}Last updated: {{ last_date }}{% else %}Never generated{% endif %}
+    {% if last_date %}
+    <p class="text-gray-500 text-sm mt-1">
+      Last generated: {{ last_date }}
+      <span class="text-gray-600 text-xs">— Results cached for 7 days</span>
     </p>
+    {% else %}
+    <p class="text-gray-500 text-sm mt-1">Never generated</p>
+    {% endif %}
   </div>
   <form method="post" action="/recommendations/refresh">
     {% if active_genre %}<input type="hidden" name="genre" value="{{ active_genre }}">{% endif %}
@@ -174,15 +179,11 @@
 </div>
 
 {% else %}
-<div class="text-center py-12 text-gray-500">
-  {% if active_genre or active_type %}
-  <p class="mb-2">No cached recommendations for this filter yet.</p>
-  <p class="text-sm mb-4">Click "Refresh AI Recs" to generate them.</p>
-  {% else %}
-  <p class="text-lg mb-2">No recommendations yet.</p>
-  <p class="text-sm">Add more titles to your library to get started.</p>
-  <a href="/search" class="mt-4 inline-block text-white underline text-sm">Search for titles →</a>
-  {% endif %}
+<div class="text-center py-16">
+  <p class="text-gray-400 text-lg mb-2">No recommendations generated yet.</p>
+  <p class="text-gray-500 text-sm mb-6">
+    Set your filters above then click "Refresh AI Recommendations" to generate them.
+  </p>
 </div>
 {% endif %}
 

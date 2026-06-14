@@ -246,20 +246,18 @@ def recommendations(
     type: str | None = None,
 ):
     fkey = _filter_key(genre, type)
-    last_date = db.get_last_rec_date(fkey)
-    error = None
 
-    if gemini.should_refresh(last_date):
-        result = _build_and_save_recs(genre=genre, type=type)
-        if result == "quota_exceeded":
-            error = "Rate limit hit. Showing cached results."
-
+    # Never auto-run pipeline on GET — only serve cached results
     recs = db.get_recommendations(fkey)
     last_date = db.get_last_rec_date(fkey)
-    providers = {
-        rec["tmdb_id"]: tmdb.get_watch_providers(rec["tmdb_id"], rec["type"])
-        for rec in recs if rec.get("tmdb_id") and rec.get("type")
-    }
+
+    providers = {}
+    if recs:
+        providers = {
+            rec["tmdb_id"]: tmdb.get_watch_providers(rec["tmdb_id"], rec["type"])
+            for rec in recs if rec.get("tmdb_id") and rec.get("type")
+        }
+
     return templates.TemplateResponse(
         request=request,
         name="recommendations.html",
@@ -267,7 +265,7 @@ def recommendations(
             "recs": recs,
             "last_date": last_date,
             "providers": providers,
-            "error": error,
+            "error": None,
             "active_genre": genre,
             "active_type": type,
             "filter_key": fkey,
