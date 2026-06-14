@@ -127,7 +127,21 @@ def save_recommendations(recs: list[dict]) -> None:
             VALUES
                 (:tmdb_id, :title, :type, :year, :poster_url, :genres, :overview, :score, :reason, :generated_date)
             """,
-            [{**r, "generated_date": today} for r in recs],
+            [
+                {
+                    "tmdb_id": r.get("tmdb_id"),
+                    "title": r.get("title", ""),
+                    "type": r.get("type", "movie"),
+                    "year": r.get("year"),
+                    "poster_url": r.get("poster_url"),
+                    "genres": r.get("genres", ""),
+                    "overview": r.get("overview", ""),
+                    "score": r.get("score", 0),
+                    "reason": r.get("reason", ""),
+                    "generated_date": today,
+                }
+                for r in recs
+            ],
         )
         conn.commit()
 
