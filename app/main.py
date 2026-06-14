@@ -275,13 +275,11 @@ def recommendations(
 
 @app.post("/recommendations/refresh")
 def recommendations_refresh(
+    request: Request,
     genre: str | None = Form(None),
     type: str | None = Form(None),
 ):
-    fkey = _filter_key(genre, type)
-    with db._connect() as conn:
-        conn.execute("DELETE FROM recommendations WHERE filter_key = ?", (fkey,))
-        conn.commit()
+    _build_and_save_recs(filter_genre=genre, filter_type=type)
     params = []
     if genre:
         params.append(f"genre={genre}")
