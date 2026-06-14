@@ -194,3 +194,40 @@ def get_details(tmdb_id: int, media_type: str) -> dict | None:
         "vote_average": data.get("vote_average"),
         "tagline": data.get("tagline"),
     }
+
+
+def get_runtime_and_seasons(tmdb_id: int, media_type: str) -> dict:
+    try:
+        if media_type == "movie":
+            data = _get(f"{_BASE}/movie/{tmdb_id}")
+            if not data:
+                return {"runtime": None, "total_seasons": None, "episodes_per_season": None}
+            return {
+                "runtime": data.get("runtime"),
+                "total_seasons": None,
+                "episodes_per_season": None,
+            }
+        else:
+            data = _get(f"{_BASE}/tv/{tmdb_id}")
+            if not data:
+                return {"runtime": None, "total_seasons": None, "episodes_per_season": None}
+
+            total_seasons = data.get("number_of_seasons")
+            total_episodes = data.get("number_of_episodes")
+
+            eps_per_season = None
+            if total_seasons and total_episodes and total_seasons > 0:
+                eps_per_season = round(total_episodes / total_seasons)
+
+            run_times = data.get("episode_run_time", [])
+            runtime = run_times[0] if run_times else None
+
+            return {
+                "runtime": runtime,
+                "total_seasons": total_seasons,
+                "episodes_per_season": eps_per_season,
+            }
+    except Exception:
+        return {"runtime": None, "total_seasons": None, "episodes_per_season": None}
+    finally:
+        time.sleep(0.25)
