@@ -27,8 +27,14 @@
 </div>
 <p class="hidden sm:block text-xs text-gray-600 mb-3">Press / to search · Esc to clear</p>
 
-<!-- Results counter -->
-<p id="results-count" class="text-xs text-gray-500 mb-4"></p>
+<!-- Results counter + clear all -->
+<div class="flex items-center justify-between mb-4">
+  <p id="results-count" class="text-xs text-gray-500"></p>
+  <button id="clear-all-filters"
+          class="hidden text-xs text-teal-400 hover:text-teal-300 cursor-pointer transition">
+    Clear all filters
+  </button>
+</div>
 
 <!-- Type filter bar -->
 <div class="flex gap-2 mb-4 text-sm">
@@ -48,7 +54,7 @@
 
 <!-- Genre filter bar -->
 {% if genres_list %}
-<div class="flex items-center gap-3 mb-6">
+<div class="flex items-center gap-3 mb-4">
   <span class="text-xs text-gray-500 flex-none">Genre</span>
   <div class="flex gap-2 overflow-x-auto flex-1" style="scrollbar-width: none">
     <button class="genre-pill bg-teal-600 border border-teal-600 text-white text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap"
@@ -65,6 +71,19 @@
 </div>
 {% endif %}
 
+<!-- Rating filter bar -->
+<div class="flex items-center gap-3 mb-6">
+  <span class="text-xs text-gray-500 flex-none">Min Rating</span>
+  <div class="flex gap-2 flex-wrap">
+    <button class="rating-pill bg-teal-600 border border-teal-600 text-white text-xs w-9 h-9 rounded cursor-pointer text-center leading-9"
+            data-rating="0">Any</button>
+    {% for n in range(1, 11) %}
+    <button class="rating-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs w-9 h-9 rounded cursor-pointer text-center leading-9 hover:border-gray-500 transition"
+            data-rating="{{ n }}">{{ n }}</button>
+    {% endfor %}
+  </div>
+</div>
+
 {% if items %}
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
   {% for item in items %}
@@ -72,7 +91,8 @@
        class="title-card bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden flex flex-col"
        data-title="{{ item.title | lower }}"
        data-type="{{ item.type }}"
-       data-genres="{{ item.genres | lower if item.genres else '' }}">
+       data-genres="{{ item.genres | lower if item.genres else '' }}"
+       data-rating="{{ item.rating or 0 }}">
 
     {% if item.poster_url %}
     <img src="{{ item.poster_url }}" alt="{{ item.title }}"
@@ -119,9 +139,10 @@
 
 <!-- No results message -->
 <div id="no-results" class="hidden text-center py-16 text-gray-500">
-  <p class="mb-2">No titles match your search.</p>
-  <button onclick="clearSearch()" class="text-teal-400 hover:text-teal-300 text-sm underline transition">
-    Clear search
+  <p class="mb-2">No titles match your filters.</p>
+  <button id="no-results-clear"
+          class="text-teal-400 hover:text-teal-300 text-sm underline transition">
+    Clear all filters
   </button>
 </div>
 
@@ -147,137 +168,174 @@ const cards = document.querySelectorAll('.title-card');
 const noResults = document.getElementById('no-results');
 const clearBtn = document.getElementById('search-clear');
 const resultsCount = document.getElementById('results-count');
+const clearAllBtn = document.getElementById('clear-all-filters');
 
 let activeFilter = 'all';
 let activeGenre = 'all';
+let activeMinRating = 0;
+
+// Style constants
+const typeActive   = ['bg-teal-500', 'text-black', 'border-teal-500'];
+const typeInactive = ['border-white/20', 'text-gray-400'];
+const pillActive   = ['bg-teal-600', 'border-teal-600', 'text-white'];
+const pillInactive = ['bg-[#1a1a1a]', 'border-gray-700', 'text-gray-300'];
 
 function filterCards() {
   const query = searchInput.value.toLowerCase().trim();
   let visible = 0;
-  let typeTotal = 0;
+  let denominator = 0;
 
   cards.forEach(card => {
     const titleMatch = card.dataset.title.includes(query);
     const genreMatch = card.dataset.genres.includes(query);
-    const typeMatch = activeFilter === 'all' || card.dataset.type === activeFilter;
+    const typeMatch  = activeFilter === 'all' || card.dataset.type === activeFilter;
 
     const cardGenres = card.dataset.genres.split(',').map(g => g.trim().toLowerCase());
-    const genreFilterMatch = activeGenre === 'all' || cardGenres.includes(activeGenre.toLowerCase());
+    const genreFilterMatch = activeGenre === 'all' || cardGenres.includes(activeGenre);
 
-    const show = (titleMatch || genreMatch) && typeMatch && genreFilterMatch;
+    const cardRating = parseInt(card.dataset.rating) || 0;
+    const ratingMatch = cardRating >= activeMinRating;
+
+    const show = (titleMatch || genreMatch) && typeMatch && genreFilterMatch && ratingMatch;
     card.style.display = show ? '' : 'none';
     if (show) visible++;
-    if (typeMatch && genreFilterMatch) typeTotal++;
+    if (typeMatch && genreFilterMatch && ratingMatch) denominator++;
   });
 
   if (noResults) noResults.classList.toggle('hidden', visible > 0);
   clearBtn.classList.toggle('hidden', query.length === 0);
 
   if (resultsCount) {
-    if (query) {
-      resultsCount.textContent = `Showing ${visible} of ${typeTotal} titles`;
-    } else {
-      resultsCount.textContent = `${typeTotal} title${typeTotal !== 1 ? 's' : ''}`;
-    }
+    resultsCount.textContent = query
+      ? `Showing ${visible} of ${denominator} titles`
+      : `${denominator} title${denominator !== 1 ? 's' : ''}`;
   }
+
+  const anyActive = query !== '' || activeFilter !== 'all' || activeGenre !== 'all' || activeMinRating > 0;
+  if (clearAllBtn) clearAllBtn.classList.toggle('hidden', !anyActive);
 
   // Sync URL state
   const params = new URLSearchParams();
   if (query) params.set('q', query);
   if (activeFilter !== 'all') params.set('type', activeFilter);
   if (activeGenre !== 'all') params.set('genre', activeGenre);
-  const newUrl = params.toString()
+  if (activeMinRating > 0) params.set('rating', activeMinRating);
+  history.replaceState({}, '', params.toString()
     ? `${window.location.pathname}?${params}`
-    : window.location.pathname;
-  history.replaceState({}, '', newUrl);
+    : window.location.pathname);
 }
 
-function clearSearch() {
+function resetAllFilters() {
   searchInput.value = '';
+  activeFilter = 'all';
+  activeGenre = 'all';
+  activeMinRating = 0;
+
+  // Reset type buttons
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.classList.remove(...typeActive);
+    b.classList.add(...typeInactive);
+  });
+  const allTypeBtn = document.querySelector('[data-filter="all"]');
+  if (allTypeBtn) { allTypeBtn.classList.remove(...typeInactive); allTypeBtn.classList.add(...typeActive); }
+
+  // Reset genre pills
+  document.querySelectorAll('.genre-pill').forEach(p => {
+    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
+  });
+  const allGenrePill = document.querySelector('.genre-pill[data-genre="all"]');
+  if (allGenrePill) { allGenrePill.classList.remove(...pillInactive); allGenrePill.classList.add(...pillActive); }
+
+  // Reset rating pills
+  document.querySelectorAll('.rating-pill').forEach(p => {
+    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
+  });
+  const anyRatingPill = document.querySelector('.rating-pill[data-rating="0"]');
+  if (anyRatingPill) { anyRatingPill.classList.remove(...pillInactive); anyRatingPill.classList.add(...pillActive); }
+
   filterCards();
   searchInput.focus();
 }
 
-clearBtn.addEventListener('click', clearSearch);
+// Clear buttons
+clearBtn.addEventListener('click', () => { searchInput.value = ''; filterCards(); searchInput.focus(); });
+if (clearAllBtn) clearAllBtn.addEventListener('click', resetAllFilters);
+const noResultsClear = document.getElementById('no-results-clear');
+if (noResultsClear) noResultsClear.addEventListener('click', resetAllFilters);
 searchInput.addEventListener('input', filterCards);
 
 // Type filter buttons
 const filterBtns = document.querySelectorAll('.filter-btn');
-const activeClass = ['bg-teal-500', 'text-black', 'border-teal-500'];
-const inactiveClass = ['border-white/20', 'text-gray-400'];
 
 function setActiveFilter(btn) {
-  filterBtns.forEach(b => {
-    b.classList.remove(...activeClass);
-    b.classList.add(...inactiveClass);
-  });
-  btn.classList.remove(...inactiveClass);
-  btn.classList.add(...activeClass);
+  filterBtns.forEach(b => { b.classList.remove(...typeActive); b.classList.add(...typeInactive); });
+  btn.classList.remove(...typeInactive);
+  btn.classList.add(...typeActive);
   activeFilter = btn.dataset.filter;
   filterCards();
 }
-
-filterBtns.forEach(btn => {
-  btn.addEventListener('click', () => setActiveFilter(btn));
-});
+filterBtns.forEach(btn => btn.addEventListener('click', () => setActiveFilter(btn)));
 
 // Genre pill buttons
-const genrePillActive = ['bg-teal-600', 'border-teal-600', 'text-white'];
-const genrePillInactive = ['bg-[#1a1a1a]', 'border-gray-700', 'text-gray-300'];
-
 function setActiveGenre(pill) {
   document.querySelectorAll('.genre-pill').forEach(p => {
-    p.classList.remove(...genrePillActive);
-    p.classList.add(...genrePillInactive);
+    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
   });
-  pill.classList.remove(...genrePillInactive);
-  pill.classList.add(...genrePillActive);
+  pill.classList.remove(...pillInactive);
+  pill.classList.add(...pillActive);
   activeGenre = pill.dataset.genre;
   filterCards();
 }
+document.querySelectorAll('.genre-pill').forEach(pill => pill.addEventListener('click', () => setActiveGenre(pill)));
 
-document.querySelectorAll('.genre-pill').forEach(pill => {
-  pill.addEventListener('click', () => setActiveGenre(pill));
-});
+// Rating pill buttons
+function setActiveRating(pill) {
+  document.querySelectorAll('.rating-pill').forEach(p => {
+    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
+  });
+  pill.classList.remove(...pillInactive);
+  pill.classList.add(...pillActive);
+  activeMinRating = parseInt(pill.dataset.rating) || 0;
+  filterCards();
+}
+document.querySelectorAll('.rating-pill').forEach(pill => pill.addEventListener('click', () => setActiveRating(pill)));
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
   const tag = document.activeElement.tagName;
   const inField = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable;
-
-  if (e.key === '/' && !inField) {
-    e.preventDefault();
-    searchInput.focus();
-  }
-
-  if (e.key === 'Escape' && document.activeElement === searchInput) {
-    clearSearch();
-  }
+  if (e.key === '/' && !inField) { e.preventDefault(); searchInput.focus(); }
+  if (e.key === 'Escape' && document.activeElement === searchInput) { searchInput.value = ''; filterCards(); }
 });
 
 // Restore state from URL on load
 const urlParams = new URLSearchParams(window.location.search);
-const initialQuery = urlParams.get('q') || '';
+const initialQuery  = urlParams.get('q') || '';
 const initialFilter = urlParams.get('type') || 'all';
-const initialGenre = urlParams.get('genre') || 'all';
+const initialGenre  = urlParams.get('genre') || 'all';
+const initialRating = parseInt(urlParams.get('rating')) || 0;
 
 if (initialQuery) searchInput.value = initialQuery;
 
-// Set genre pill from URL
 if (initialGenre !== 'all') {
   activeGenre = initialGenre;
   const targetPill = document.querySelector(`.genre-pill[data-genre="${initialGenre}"]`);
   if (targetPill) {
-    document.querySelectorAll('.genre-pill').forEach(p => {
-      p.classList.remove(...genrePillActive);
-      p.classList.add(...genrePillInactive);
-    });
-    targetPill.classList.remove(...genrePillInactive);
-    targetPill.classList.add(...genrePillActive);
+    document.querySelectorAll('.genre-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); });
+    targetPill.classList.remove(...pillInactive); targetPill.classList.add(...pillActive);
   }
 }
 
-// Set type filter from URL (also triggers filterCards)
+if (initialRating > 0) {
+  activeMinRating = initialRating;
+  const targetRating = document.querySelector(`.rating-pill[data-rating="${initialRating}"]`);
+  if (targetRating) {
+    document.querySelectorAll('.rating-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); });
+    targetRating.classList.remove(...pillInactive); targetRating.classList.add(...pillActive);
+  }
+}
+
+// Triggers filterCards() and sets type button active state
 const targetFilterBtn = document.querySelector(`[data-filter="${initialFilter}"]`);
 setActiveFilter(targetFilterBtn || document.querySelector('[data-filter="all"]'));
 </script>
