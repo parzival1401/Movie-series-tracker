@@ -16,29 +16,43 @@
 </div>
 {% endif %}
 
+<!-- Search bar -->
+<div class="relative mb-3">
+  <input id="library-search" type="text" placeholder="Search your library..."
+         autofocus autocomplete="off"
+         class="w-full bg-[#1a1a1a] border border-gray-700 text-white rounded-lg px-4 py-2 pr-9 text-sm focus:outline-none focus:border-gray-500" />
+  <button id="search-clear"
+          class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-lg leading-none transition"
+          aria-label="Clear search">×</button>
+</div>
+
+<!-- Results counter -->
+<p id="results-count" class="text-xs text-gray-500 mb-4"></p>
+
 <!-- Filter bar -->
 <div class="flex gap-2 mb-6 text-sm">
-  <a href="/library"
-     class="px-4 py-1.5 rounded-full border transition
-            {% if not current_filter %}bg-white text-black border-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
+  <button data-filter="all"
+          class="filter-btn px-4 py-1.5 rounded-full border transition border-white/20 text-gray-400 hover:text-white">
     All
-  </a>
-  <a href="/library?filter=movie"
-     class="px-4 py-1.5 rounded-full border transition
-            {% if current_filter == 'movie' %}bg-white text-black border-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
+  </button>
+  <button data-filter="movie"
+          class="filter-btn px-4 py-1.5 rounded-full border transition border-white/20 text-gray-400 hover:text-white">
     Movies
-  </a>
-  <a href="/library?filter=series"
-     class="px-4 py-1.5 rounded-full border transition
-            {% if current_filter == 'series' %}bg-white text-black border-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
+  </button>
+  <button data-filter="series"
+          class="filter-btn px-4 py-1.5 rounded-full border transition border-white/20 text-gray-400 hover:text-white">
     Series
-  </a>
+  </button>
 </div>
 
 {% if items %}
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
   {% for item in items %}
-  <div id="card-{{ item.id }}" class="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden flex flex-col">
+  <div id="card-{{ item.id }}"
+       class="title-card bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden flex flex-col"
+       data-title="{{ item.title | lower }}"
+       data-type="{{ item.type }}"
+       data-genres="{{ item.genres | lower if item.genres else '' }}">
 
     {% if item.poster_url %}
     <img src="{{ item.poster_url }}" alt="{{ item.title }}"
@@ -82,6 +96,15 @@
   </div>
   {% endfor %}
 </div>
+
+<!-- No results message -->
+<div id="no-results" class="hidden text-center py-16 text-gray-500">
+  <p class="mb-2">No titles match your search.</p>
+  <button onclick="clearSearch()" class="text-teal-400 hover:text-teal-300 text-sm underline transition">
+    Clear search
+  </button>
+</div>
+
 {% else %}
 <div class="text-center py-20 text-gray-500">
   <p class="text-lg mb-3">Nothing here yet.</p>
@@ -95,8 +118,82 @@ async function removeCard(id) {
   const res = await fetch(`/watched/${id}`, { method: 'DELETE' });
   if (res.ok) {
     document.getElementById(`card-${id}`).remove();
+    filterCards();
   }
 }
+
+const searchInput = document.getElementById('library-search');
+const cards = document.querySelectorAll('.title-card');
+const noResults = document.getElementById('no-results');
+const clearBtn = document.getElementById('search-clear');
+const resultsCount = document.getElementById('results-count');
+const totalCards = cards.length;
+
+let activeFilter = 'all';
+
+function filterCards() {
+  const query = searchInput.value.toLowerCase().trim();
+  let visible = 0;
+  let typeTotal = 0;
+
+  cards.forEach(card => {
+    const titleMatch = card.dataset.title.includes(query);
+    const genreMatch = card.dataset.genres.includes(query);
+    const typeMatch = activeFilter === 'all' || card.dataset.type === activeFilter;
+    const show = (titleMatch || genreMatch) && typeMatch;
+    card.style.display = show ? '' : 'none';
+    if (show) visible++;
+    if (typeMatch) typeTotal++;
+  });
+
+  if (noResults) noResults.classList.toggle('hidden', visible > 0);
+  clearBtn.classList.toggle('hidden', query.length === 0);
+
+  if (resultsCount) {
+    if (query) {
+      resultsCount.textContent = `Showing ${visible} of ${typeTotal} titles`;
+    } else {
+      resultsCount.textContent = `${typeTotal} title${typeTotal !== 1 ? 's' : ''}`;
+    }
+  }
+}
+
+function clearSearch() {
+  searchInput.value = '';
+  filterCards();
+  searchInput.focus();
+}
+
+if (clearBtn) {
+  clearBtn.addEventListener('click', clearSearch);
+}
+
+if (searchInput) {
+  searchInput.addEventListener('input', filterCards);
+}
+
+const filterBtns = document.querySelectorAll('.filter-btn');
+const activeClass = ['bg-teal-500', 'text-black', 'border-teal-500'];
+const inactiveClass = ['border-white/20', 'text-gray-400'];
+
+function setActiveFilter(btn) {
+  filterBtns.forEach(b => {
+    b.classList.remove(...activeClass);
+    b.classList.add(...inactiveClass);
+  });
+  btn.classList.remove(...inactiveClass);
+  btn.classList.add(...activeClass);
+  activeFilter = btn.dataset.filter;
+  filterCards();
+}
+
+filterBtns.forEach(btn => {
+  btn.addEventListener('click', () => setActiveFilter(btn));
+});
+
+// Init: activate All button and set initial count
+const allBtn = document.querySelector('[data-filter="all"]');
+if (allBtn) setActiveFilter(allBtn);
 </script>
 
 {% endblock %}
