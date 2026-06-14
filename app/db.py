@@ -61,6 +61,19 @@ def init_db() -> None:
 
         conn.commit()
 
+    for col, definition in [
+        ("runtime",              "INTEGER"),
+        ("total_seasons",        "INTEGER"),
+        ("episodes_per_season",  "INTEGER"),
+    ]:
+        for table in ["watched", "recommendations"]:
+            try:
+                with _connect() as conn:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
+                    conn.commit()
+            except Exception:
+                pass
+
 
 def add_watched(
     title: str,
@@ -74,6 +87,9 @@ def add_watched(
     notes: str | None,
     source: str = "tmdb",
     external_id: int | None = None,
+    runtime: int | None = None,
+    total_seasons: int | None = None,
+    episodes_per_season: int | None = None,
 ) -> int:
     with _connect() as conn:
         existing = conn.execute(
@@ -85,12 +101,14 @@ def add_watched(
             """
             INSERT INTO watched
                 (title, type, tmdb_id, year, poster_url, genres, rating, seasons_watched,
-                 date_added, notes, source, external_id)
+                 date_added, notes, source, external_id,
+                 runtime, total_seasons, episodes_per_season)
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (title, type, tmdb_id, year, poster_url, genres, rating, seasons_watched,
-             date.today().isoformat(), notes, source, external_id),
+             date.today().isoformat(), notes, source, external_id,
+             runtime, total_seasons, episodes_per_season),
         )
         conn.commit()
         return cursor.lastrowid
