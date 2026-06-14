@@ -4,13 +4,13 @@ import sys
 import time
 from pathlib import Path
 
-# Allow `from app import ...` when run from project root
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from app import db, tmdb
+from app import db
+from app.anilist import find_title
 
 CSV_PATH = Path("watched.csv")
 
@@ -30,7 +30,8 @@ def main() -> None:
     with open(CSV_PATH, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
-    added = 0
+    added_tmdb = 0
+    added_anilist = 0
     skipped_not_found = 0
     skipped_duplicate = 0
 
@@ -42,21 +43,29 @@ def main() -> None:
         seasons_watched = row.get("seasons_watched", "").strip() or None
         notes = row.get("notes", "").strip() or None
 
-        print(f"Searching TMDB for: {title} ({media_type})...")
+        print(f"Searching for: {title} ({media_type})...")
 
-        result = tmdb.search_title(title, media_type)
+        result = find_title(title, media_type)
 
         if result is None:
-            print("  ✗ Not found on any API. Add manually at http://100.77.67.90:8000/add/manual")
+            print(f"  ✗ Not found on any API — add manually at /add/manual")
             skipped_not_found += 1
             time.sleep(0.5)
             continue
 
-        print(f"  ✓ Found: {result['title']} ({result['year']}) — TMDB ID: {result['tmdb_id']}")
+        source = result.get("source", "tmdb")
+        external_id = result.get("external_id")
+        tmdb_id = result.get("tmdb_id")
+
+        source_label = "AniList" if source == "anilist" else "TMDB"
+        print(f"  ✓ Found on {source_label}: {result['title']} ({result['year']})")
 
         if args.dry_run:
-            print(f"  [dry-run] Would add: rating={rating}, seasons={seasons_watched}, notes={notes}")
-            added += 1
+            print(f"  [dry-run] Would add: source={source}, rating={rating}, seasons={seasons_watched}, notes={notes}")
+            if source == "anilist":
+                added_anilist += 1
+            else:
+                added_tmdb += 1
             time.sleep(0.5)
             continue
 
@@ -64,16 +73,21 @@ def main() -> None:
             db.add_watched(
                 title=result["title"],
                 type=media_type,
-                tmdb_id=result["tmdb_id"],
+                tmdb_id=tmdb_id,
                 year=csv_year or result["year"],
                 poster_url=result["poster_url"],
                 genres=result["genres"],
                 rating=rating,
                 seasons_watched=seasons_watched,
                 notes=notes,
+                source=source,
+                external_id=external_id,
             )
             print("  ✓ Added.")
-            added += 1
+            if source == "anilist":
+                added_anilist += 1
+            else:
+                added_tmdb += 1
         except ValueError:
             print("  → Already in library, skipping.")
             skipped_duplicate += 1
@@ -81,7 +95,13 @@ def main() -> None:
         time.sleep(0.5)
 
     suffix = " (dry-run)" if args.dry_run else ""
-    print(f"\nDone{suffix}. Added: {added} | Skipped (not found): {skipped_not_found} | Skipped (duplicate): {skipped_duplicate}")
+    not_found_note = f" (add these manually at /add/manual)" if skipped_not_found else ""
+    print(
+        f"\nDone{suffix}. "
+        f"Added via TMDB: {added_tmdb} | "
+        f"Added via AniList: {added_anilist} | "
+        f"Not found: {skipped_not_found}{not_found_note}"
+    )
 
 
 if __name__ == "__main__":
