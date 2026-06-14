@@ -47,7 +47,7 @@ def main() -> None:
         result = tmdb.search_title(title, media_type)
 
         if result is None:
-            print("  ⚠ Not found on TMDB, skipping.")
+            print("  ✗ Not found on any API. Add manually at http://100.77.67.90:8000/add/manual")
             skipped_not_found += 1
             time.sleep(0.5)
             continue

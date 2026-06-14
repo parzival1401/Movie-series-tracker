@@ -114,6 +114,49 @@ def delete_watched(id: int):
 
 
 # ---------------------------------------------------------------------------
+# Manual add (fallback for titles not found by any API)
+# ---------------------------------------------------------------------------
+
+@app.get("/add/manual")
+def manual_add_form(request: Request, error: str | None = None):
+    return templates.TemplateResponse(
+        request=request,
+        name="manual_add.html",
+        context={"error": error},
+    )
+
+
+@app.post("/add/manual")
+def manual_add_submit(
+    title: str = Form(...),
+    type: str = Form(...),
+    year: int | None = Form(None),
+    poster_url: str | None = Form(None),
+    genres: str | None = Form(None),
+    rating: int = Form(...),
+    seasons_watched: str | None = Form(None),
+    notes: str | None = Form(None),
+):
+    try:
+        db.add_watched(
+            title=title,
+            type=type,
+            tmdb_id=None,
+            year=year,
+            poster_url=poster_url or None,
+            genres=genres or None,
+            rating=rating,
+            seasons_watched=seasons_watched or None,
+            notes=notes or None,
+            source="manual",
+            external_id=None,
+        )
+    except ValueError:
+        return RedirectResponse("/add/manual?error=duplicate", status_code=303)
+    return RedirectResponse("/library", status_code=303)
+
+
+# ---------------------------------------------------------------------------
 # Similar
 # ---------------------------------------------------------------------------
 

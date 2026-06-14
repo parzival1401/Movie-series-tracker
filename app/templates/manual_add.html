@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Add Manually — MovieRec{% endblock %}
+{% block content %}
+
+<div class="max-w-lg mx-auto">
+  <div class="mb-8">
+    <h1 class="text-2xl font-bold">Add Title Manually</h1>
+    <p class="text-sm text-gray-500 mt-1">Use this for titles not found by automatic search</p>
+  </div>
+
+  {% if error == 'duplicate' %}
+  <div class="mb-6 bg-red-900/30 border border-red-500/40 text-red-300 text-sm rounded-xl px-4 py-3">
+    This title is already in your library.
+  </div>
+  {% endif %}
+
+  <form action="/add/manual" method="POST" class="flex flex-col gap-5">
+
+    <!-- Title -->
+    <label class="flex flex-col gap-1.5">
+      <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Title <span class="text-red-400">*</span></span>
+      <input type="text" name="title" required placeholder="e.g. Perfect Blue"
+             class="bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-white/40" />
+    </label>
+
+    <!-- Type toggle -->
+    <div class="flex flex-col gap-1.5">
+      <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Type <span class="text-red-400">*</span></span>
+      <div class="flex gap-3">
+        <label class="flex-1">
+          <input type="radio" name="type" value="movie" class="sr-only peer" checked />
+          <div class="peer-checked:bg-white peer-checked:text-black text-gray-400 border border-white/20 peer-checked:border-white
+                      rounded-xl py-2.5 text-sm font-medium text-center cursor-pointer transition select-none"
+               onclick="showSeasonsField(false)">
+            Movie
+          </div>
+        </label>
+        <label class="flex-1">
+          <input type="radio" name="type" value="series" class="sr-only peer" />
+          <div class="peer-checked:bg-white peer-checked:text-black text-gray-400 border border-white/20 peer-checked:border-white
+                      rounded-xl py-2.5 text-sm font-medium text-center cursor-pointer transition select-none"
+               onclick="showSeasonsField(true)">
+            Series
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Year + Rating row -->
+    <div class="flex gap-4">
+      <label class="flex-1 flex flex-col gap-1.5">
+        <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Year</span>
+        <input type="number" name="year" placeholder="e.g. 2023" min="1888" max="2099"
+               class="bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-white/40" />
+      </label>
+      <label class="flex-1 flex flex-col gap-1.5">
+        <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Rating (1-10) <span class="text-red-400">*</span></span>
+        <input type="number" name="rating" required min="1" max="10"
+               class="bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-white/40" />
+      </label>
+    </div>
+
+    <!-- Genres -->
+    <label class="flex flex-col gap-1.5">
+      <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Genres</span>
+      <input type="text" name="genres" placeholder="e.g. Action, Thriller"
+             class="bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-white/40" />
+    </label>
+
+    <!-- Seasons watched (hidden for movies) -->
+    <label id="seasons-field" class="hidden flex flex-col gap-1.5">
+      <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Seasons Watched</span>
+      <input type="text" name="seasons_watched" placeholder="e.g. 1,2,3 — leave blank for movies"
+             class="bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-white/40" />
+    </label>
+
+    <!-- Poster URL + preview -->
+    <label class="flex flex-col gap-1.5">
+      <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Poster URL</span>
+      <input type="url" name="poster_url" id="poster-url-input" placeholder="Paste any image URL"
+             class="bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-white/40"
+             oninput="updatePosterPreview(this.value)" />
+      <div id="poster-preview" class="hidden mt-1">
+        <img id="poster-img" src="" alt="Poster preview"
+             class="w-[60px] h-[90px] object-cover rounded-lg border border-white/10" />
+      </div>
+    </label>
+
+    <!-- Notes -->
+    <label class="flex flex-col gap-1.5">
+      <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Notes</span>
+      <textarea name="notes" rows="3" placeholder="Optional notes…"
+                class="bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-white/40 resize-none"></textarea>
+    </label>
+
+    <button type="submit"
+            class="w-full bg-teal-500 hover:bg-teal-400 text-black font-semibold py-3 rounded-xl text-sm transition mt-1">
+      Add to Library
+    </button>
+  </form>
+
+  <p class="text-center text-sm text-gray-600 mt-6">
+    <a href="/search" class="hover:text-gray-400 transition">← Search automatically instead</a>
+  </p>
+</div>
+
+<script>
+function showSeasonsField(show) {
+  const field = document.getElementById('seasons-field');
+  field.classList.toggle('hidden', !show);
+}
+
+function updatePosterPreview(url) {
+  const preview = document.getElementById('poster-preview');
+  const img = document.getElementById('poster-img');
+  if (url.trim()) {
+    img.src = url.trim();
+    preview.classList.remove('hidden');
+  } else {
+    preview.classList.add('hidden');
+    img.src = '';
+  }
+}
+
+// Sync radio clicks to seasons visibility
+document.querySelectorAll('input[name="type"]').forEach(radio => {
+  radio.addEventListener('change', () => showSeasonsField(radio.value === 'series'));
+});
+</script>
+
+{% endblock %}
