@@ -28,7 +28,8 @@
 </div>
 {% endif %}
 
-<div class="flex items-center justify-between mb-6">
+<!-- Header -->
+<div class="flex items-start justify-between mb-4">
   <div>
     <h1 class="text-2xl font-bold">Recommendations</h1>
     <p class="text-sm text-gray-500 mt-1">
@@ -36,19 +37,84 @@
     </p>
   </div>
   <form method="post" action="/recommendations/refresh">
+    {% if active_genre %}<input type="hidden" name="genre" value="{{ active_genre }}">{% endif %}
+    {% if active_type %}<input type="hidden" name="type" value="{{ active_type }}">{% endif %}
     <button type="submit"
-            class="text-sm bg-white text-black font-medium px-4 py-2 rounded-xl hover:bg-gray-200 transition">
-      ↺ Refresh
+            class="text-sm bg-teal-700 hover:bg-teal-600 text-white font-medium px-4 py-2 rounded-xl transition whitespace-nowrap">
+      ↺ Refresh AI Recs{% if active_genre or active_type %} for {{ (active_genre or '') ~ ' ' ~ (active_type or '') | trim }}{% endif %}
     </button>
   </form>
 </div>
 
+<!-- Filter bar -->
+<div class="flex flex-col gap-3 mb-4">
+
+  <!-- Type buttons -->
+  <div class="flex gap-2 text-sm">
+    {% set base = '/recommendations' ~ ('?genre=' ~ active_genre if active_genre else '') %}
+    <a href="/recommendations{% if active_genre %}?genre={{ active_genre }}{% endif %}"
+       class="px-4 py-1.5 rounded-full border transition
+              {% if not active_type %}bg-teal-600 border-teal-600 text-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
+      All
+    </a>
+    <a href="/recommendations?type=movie{% if active_genre %}&genre={{ active_genre }}{% endif %}"
+       class="px-4 py-1.5 rounded-full border transition
+              {% if active_type == 'movie' %}bg-teal-600 border-teal-600 text-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
+      Movies
+    </a>
+    <a href="/recommendations?type=series{% if active_genre %}&genre={{ active_genre }}{% endif %}"
+       class="px-4 py-1.5 rounded-full border transition
+              {% if active_type == 'series' %}bg-teal-600 border-teal-600 text-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
+      Series
+    </a>
+  </div>
+
+  <!-- Genre form -->
+  <form method="get" action="/recommendations" class="flex items-center gap-2">
+    {% if active_type %}<input type="hidden" name="type" value="{{ active_type }}">{% endif %}
+    <input type="text" name="genre" id="js-genre-input"
+           value="{{ active_genre or '' }}"
+           placeholder="Filter by genre e.g. Action, Thriller, Animation"
+           oninput="filterRecs()"
+           class="flex-1 bg-[#1a1a1a] border border-gray-700 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-gray-500" />
+    <button type="submit"
+            class="text-sm bg-white text-black font-medium px-3 py-1.5 rounded-lg hover:bg-gray-200 transition whitespace-nowrap">
+      Apply
+    </button>
+    {% if active_genre %}
+    <a href="/recommendations{% if active_type %}?type={{ active_type }}{% endif %}"
+       class="text-sm text-teal-400 hover:text-teal-300 transition whitespace-nowrap">
+      ✕ Clear
+    </a>
+    {% endif %}
+  </form>
+
+</div>
+
+<!-- Active filter summary + count -->
+<div class="flex items-center justify-between mb-5">
+  <p class="text-xs text-teal-400">
+    {% if active_genre or active_type %}
+      Showing
+      {% if active_genre %}{{ active_genre }}{% endif %}
+      {% if active_type %}{{ active_type }}{% endif %}
+      recommendations
+    {% endif %}
+  </p>
+  <p id="rec-count" class="text-xs text-gray-500"></p>
+</div>
+
+<!-- Hidden JS filter state -->
+<input type="hidden" id="js-type-filter" value="{{ active_type or '' }}" />
+
 {% if recs %}
-<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-4" id="rec-list">
   {% for rec in recs %}
   {% set p = providers.get(rec.tmdb_id, {}) %}
   <div id="rec-{{ rec.id }}"
-       class="bg-[#1a1a1a] border border-white/10 rounded-xl flex gap-4 p-4 transition-opacity duration-500{% if rec.seen %} opacity-40{% endif %}">
+       class="rec-card bg-[#1a1a1a] border border-white/10 rounded-xl flex gap-4 p-4 transition-opacity duration-500{% if rec.seen %} opacity-40{% endif %}"
+       data-type="{{ rec.type or '' }}"
+       data-genres="{{ rec.genres | lower if rec.genres else '' }}">
 
     <!-- Rank -->
     <div class="flex-none w-7 text-center pt-1">
@@ -82,7 +148,7 @@
       {{ provider_logos(p) }}
     </div>
 
-    <!-- Action -->
+    <!-- Actions -->
     <div class="flex-none self-center flex flex-col gap-2 items-end">
       {% if rec.title %}
       <a href="/search?q={{ rec.title | urlencode }}&type={{ rec.type or 'movie' }}"
@@ -103,27 +169,62 @@
   {% endfor %}
 </div>
 
+<div id="no-recs-msg" class="hidden text-center py-12 text-gray-500">
+  <p>No recommendations match this filter.</p>
+</div>
+
 {% else %}
-<div class="text-center py-20 text-gray-500">
+<div class="text-center py-12 text-gray-500">
+  {% if active_genre or active_type %}
+  <p class="mb-2">No cached recommendations for this filter yet.</p>
+  <p class="text-sm mb-4">Click "Refresh AI Recs" to generate them.</p>
+  {% else %}
   <p class="text-lg mb-2">No recommendations yet.</p>
   <p class="text-sm">Add more titles to your library to get started.</p>
   <a href="/search" class="mt-4 inline-block text-white underline text-sm">Search for titles →</a>
+  {% endif %}
 </div>
 {% endif %}
 
 <script>
+function filterRecs() {
+  const typeFilter = document.getElementById('js-type-filter').value;
+  const genreFilter = document.getElementById('js-genre-input').value.toLowerCase().trim();
+  const cards = document.querySelectorAll('.rec-card');
+  let visible = 0;
+
+  cards.forEach(card => {
+    const typeMatch = !typeFilter || card.dataset.type === typeFilter;
+    const genreMatch = !genreFilter || card.dataset.genres.includes(genreFilter);
+    const show = typeMatch && genreMatch;
+    card.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  const countEl = document.getElementById('rec-count');
+  if (countEl) countEl.textContent = `${visible} recommendation${visible !== 1 ? 's' : ''}`;
+
+  const noMsg = document.getElementById('no-recs-msg');
+  if (noMsg) noMsg.classList.toggle('hidden', visible > 0);
+}
+
 async function markSeen(id) {
   const res = await fetch(`/recommendations/seen/${id}`, { method: 'POST' });
   if (res.ok) {
     const card = document.getElementById(`rec-${id}`);
     card.style.opacity = '0.4';
-    const btn = card.querySelector('button');
-    const span = document.createElement('span');
-    span.className = 'text-xs text-gray-600';
-    span.textContent = 'Seen';
-    btn.replaceWith(span);
+    const btn = card.querySelector('button[onclick]');
+    if (btn) {
+      const span = document.createElement('span');
+      span.className = 'text-xs text-gray-600';
+      span.textContent = 'Seen';
+      btn.replaceWith(span);
+    }
   }
 }
+
+// Init count on load
+filterRecs();
 </script>
 
 {% endblock %}
