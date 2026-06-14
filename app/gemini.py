@@ -4,9 +4,10 @@ from datetime import date, timedelta
 from typing import Callable
 
 from google import genai
+from google.genai import types
 
 _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
-_MODEL = "gemini-1.5-flash"
+_MODEL = "gemini-2.0-flash"
 
 TASTE_PROFILE = """
 [I WILL FILL THIS IN — DO NOT CHANGE THIS LINE]
@@ -70,7 +71,14 @@ Order by score descending."""
 def rerank_recommendations(watched_list: list[dict], candidates: list[dict]) -> list[dict]:
     try:
         prompt = build_prompt(watched_list, candidates)
-        response = _client.models.generate_content(model=_MODEL, contents=prompt)
+        response = _client.models.generate_content(
+            model=_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=2000,
+            ),
+        )
         text = response.text.strip()
 
         if text.startswith("```"):
