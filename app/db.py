@@ -54,6 +54,11 @@ def init_db() -> None:
                 seen           INTEGER DEFAULT 0
             )
         """)
+        try:
+            conn.execute("ALTER TABLE recommendations ADD COLUMN filter_key TEXT DEFAULT 'all'")
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()
 
 
@@ -116,16 +121,29 @@ def get_watched_tmdb_ids() -> set[int]:
     return {r["tmdb_id"] for r in rows}
 
 
-def save_recommendations(recs: list[dict]) -> None:
+def save_recommendations(
+    recs: list[dict],
+    filter_genre: str | None = None,
+    filter_type: str | None = None,
+) -> None:
+    parts = []
+    if filter_genre:
+        parts.append(f"genre:{filter_genre.lower()}")
+    if filter_type:
+        parts.append(f"type:{filter_type.lower()}")
+    filter_key = "|".join(parts) if parts else "all"
+
     today = date.today().isoformat()
     with _connect() as conn:
-        conn.execute("DELETE FROM recommendations")
+        conn.execute("DELETE FROM recommendations WHERE filter_key = ?", (filter_key,))
         conn.executemany(
             """
             INSERT INTO recommendations
-                (tmdb_id, title, type, year, poster_url, genres, overview, score, reason, generated_date)
+                (tmdb_id, title, type, year, poster_url, genres, overview,
+                 score, reason, generated_date, filter_key)
             VALUES
-                (:tmdb_id, :title, :type, :year, :poster_url, :genres, :overview, :score, :reason, :generated_date)
+                (:tmdb_id, :title, :type, :year, :poster_url, :genres, :overview,
+                 :score, :reason, :generated_date, :filter_key)
             """,
             [
                 {
@@ -139,6 +157,7 @@ def save_recommendations(recs: list[dict]) -> None:
                     "score": r.get("score", 0),
                     "reason": r.get("reason", ""),
                     "generated_date": today,
+                    "filter_key": filter_key,
                 }
                 for r in recs
             ],
@@ -146,20 +165,22 @@ def save_recommendations(recs: list[dict]) -> None:
         conn.commit()
 
 
-def get_recommendations() -> list[dict]:
+def get_recommendations(filter_key: str = "all") -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM recommendations ORDER BY score DESC"
+            "SELECT * FROM recommendations WHERE filter_key = ? ORDER BY score DESC",
+            (filter_key,),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_last_rec_date() -> str | None:
+def get_last_rec_date(filter_key: str = "all") -> str | None:
     with _connect() as conn:
         row = conn.execute(
-            "SELECT MAX(generated_date) AS d FROM recommendations"
+            "SELECT MAX(generated_date) AS d FROM recommendations WHERE filter_key = ?",
+            (filter_key,),
         ).fetchone()
-    return row["d"] if row else None
+    return row["d"] if row and row["d"] else None
 
 
 def mark_seen(rec_id: int) -> None:

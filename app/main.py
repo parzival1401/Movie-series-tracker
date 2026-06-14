@@ -195,32 +195,67 @@ def similar(request: Request, tmdb_id: int, media_type: str):
 # Recommendations
 # ---------------------------------------------------------------------------
 
-def _build_and_save_recs() -> str | None:
+def _filter_key(genre: str | None, type: str | None) -> str:
+    parts = []
+    if genre:
+        parts.append(f"genre:{genre.lower()}")
+    if type:
+        parts.append(f"type:{type.lower()}")
+    return "|".join(parts) if parts else "all"
+
+
+def _build_and_save_recs(
+    genre: str | None = None,
+    type: str | None = None,
+) -> str | None:
     watched = db.get_all_watched()
     watched_ids = db.get_watched_tmdb_ids()
-    candidates = gemini.aggregate_tmdb_recs(watched, tmdb.get_recommendations)
-    candidates = [c for c in candidates if c["tmdb_id"] not in watched_ids]
-    final = gemini.rerank_recommendations(watched, candidates)
+
+    top_watched = sorted(
+        [w for w in watched if w.get("tmdb_id") and (w.get("rating") or 0) >= 7],
+        key=lambda x: x["rating"],
+        reverse=True,
+    )[:30]
+
+    print(f"Building recs — filter: genre={genre} type={type}")
+    candidates = gemini.aggregate_tmdb_recs(
+        top_watched, tmdb.get_recommendations,
+        filter_genre=genre, filter_type=type,
+    )
+    candidates = [c for c in candidates if c.get("tmdb_id") not in watched_ids]
+
+    print(f"Got {len(candidates)} candidates, calling Groq...")
+    final = gemini.rerank_recommendations(watched, candidates, filter_genre=genre, filter_type=type)
+
     if final == "quota_exceeded":
         return "quota_exceeded"
+
     candidate_map = {c["tmdb_id"]: c for c in candidates}
     for item in final:
         if not item.get("poster_url"):
-            item["poster_url"] = candidate_map.get(item["tmdb_id"], {}).get("poster_url")
-    db.save_recommendations(final)
+            item["poster_url"] = candidate_map.get(item.get("tmdb_id"), {}).get("poster_url")
+
+    db.save_recommendations(final, filter_genre=genre, filter_type=type)
     return None
 
 
 @app.get("/recommendations")
-def recommendations(request: Request):
-    last_date = db.get_last_rec_date()
+def recommendations(
+    request: Request,
+    genre: str | None = None,
+    type: str | None = None,
+):
+    fkey = _filter_key(genre, type)
+    last_date = db.get_last_rec_date(fkey)
     error = None
+
     if gemini.should_refresh(last_date):
-        result = _build_and_save_recs()
+        result = _build_and_save_recs(genre=genre, type=type)
         if result == "quota_exceeded":
-            error = "Gemini quota exceeded. Showing previous results. Try again tomorrow."
-    recs = db.get_recommendations()
-    last_date = db.get_last_rec_date()
+            error = "Rate limit hit. Showing cached results."
+
+    recs = db.get_recommendations(fkey)
+    last_date = db.get_last_rec_date(fkey)
     providers = {
         rec["tmdb_id"]: tmdb.get_watch_providers(rec["tmdb_id"], rec["type"])
         for rec in recs if rec.get("tmdb_id") and rec.get("type")
@@ -228,14 +263,34 @@ def recommendations(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="recommendations.html",
-        context={"recs": recs, "last_date": last_date, "providers": providers, "error": error},
+        context={
+            "recs": recs,
+            "last_date": last_date,
+            "providers": providers,
+            "error": error,
+            "active_genre": genre,
+            "active_type": type,
+            "filter_key": fkey,
+        },
     )
 
 
 @app.post("/recommendations/refresh")
-def recommendations_refresh():
-    _build_and_save_recs()
-    return RedirectResponse("/recommendations", status_code=303)
+def recommendations_refresh(
+    genre: str | None = Form(None),
+    type: str | None = Form(None),
+):
+    fkey = _filter_key(genre, type)
+    with db._connect() as conn:
+        conn.execute("DELETE FROM recommendations WHERE filter_key = ?", (fkey,))
+        conn.commit()
+    params = []
+    if genre:
+        params.append(f"genre={genre}")
+    if type:
+        params.append(f"type={type}")
+    redirect_url = "/recommendations" + (f"?{'&'.join(params)}" if params else "")
+    return RedirectResponse(redirect_url, status_code=303)
 
 
 @app.post("/recommendations/seen/{id}")

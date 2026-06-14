@@ -30,7 +30,12 @@ def should_refresh(last_date: str | None) -> bool:
     return (date.today() - last) > timedelta(days=7)
 
 
-def build_prompt(watched_list: list[dict], candidates: list[dict]) -> str:
+def build_prompt(
+    watched_list: list[dict],
+    candidates: list[dict],
+    filter_genre: str | None = None,
+    filter_type: str | None = None,
+) -> str:
     loved = [w for w in watched_list if w.get("rating") and w["rating"] >= 9]
     liked = [w for w in watched_list if w.get("rating") and 7 <= w["rating"] <= 8]
     mixed = [w for w in watched_list if w.get("rating") and w["rating"] <= 6]
@@ -51,6 +56,19 @@ def build_prompt(watched_list: list[dict], candidates: list[dict]) -> str:
         for i, c in enumerate(candidates[:20])
     )
 
+    filter_context = ""
+    if filter_genre or filter_type:
+        parts = []
+        if filter_type:
+            parts.append(f"type: {filter_type}")
+        if filter_genre:
+            parts.append(f"genre: {filter_genre}")
+        filter_context = f"""
+ACTIVE FILTERS: The user specifically wants recommendations filtered by {' and '.join(parts)}.
+Prioritize candidates that match these filters.
+Only recommend titles that match the filter criteria.
+"""
+
     return f"""You are a recommendation engine. Rerank the 20 candidate titles below for this user.
 
 USER'S WATCH HISTORY:
@@ -65,7 +83,7 @@ Mixed (1-6):
 
 TASTE PROFILE:
 {TASTE_PROFILE.strip()}
-
+{filter_context}
 CANDIDATES:
 {candidate_lines}
 
@@ -74,11 +92,16 @@ Each object must have exactly these keys: tmdb_id (integer), title (string), sco
 Order by score descending."""
 
 
-def rerank_recommendations(watched_list: list[dict], candidates: list[dict]):
+def rerank_recommendations(
+    watched_list: list[dict],
+    candidates: list[dict],
+    filter_genre: str | None = None,
+    filter_type: str | None = None,
+):
     if not candidates:
         return []
     try:
-        prompt = build_prompt(watched_list, candidates)
+        prompt = build_prompt(watched_list, candidates, filter_genre, filter_type)
 
         response = get_client().chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -88,13 +111,11 @@ def rerank_recommendations(watched_list: list[dict], candidates: list[dict]):
         )
 
         text = response.choices[0].message.content
-
         text = re.sub(r"```json\s*", "", text)
         text = re.sub(r"```\s*", "", text)
         text = text.strip()
 
         parsed = json.loads(text)
-
         required = {"tmdb_id", "title", "score", "reason"}
         valid = [item for item in parsed if required.issubset(item.keys())]
         return valid
@@ -111,26 +132,59 @@ def rerank_recommendations(watched_list: list[dict], candidates: list[dict]):
 def aggregate_tmdb_recs(
     watched_list: list[dict],
     get_recommendations_fn: Callable[[int, str], list[dict]],
+    filter_genre: str | None = None,
+    filter_type: str | None = None,
 ) -> list[dict]:
-    scored: dict[int, dict] = {}
+    # Seed titles: filter by type if requested, fall back to all if too few
+    seed_titles = watched_list
+    if filter_type:
+        type_filtered = [w for w in seed_titles if w.get("type", "").lower() == filter_type.lower()]
+        if len(type_filtered) >= 5:
+            seed_titles = type_filtered
 
-    for watched in watched_list:
-        tmdb_id = watched.get("tmdb_id")
-        rating = watched.get("rating")
-        media_type = watched.get("type")
-        if not tmdb_id or not rating or not media_type:
-            continue
+    if filter_genre:
+        genre_filtered = [
+            w for w in seed_titles
+            if w.get("genres") and filter_genre.lower() in w["genres"].lower()
+        ]
+        if len(genre_filtered) >= 3:
+            seed_titles = genre_filtered
 
-        weight = rating / 10.0
-        candidates = get_recommendations_fn(tmdb_id, media_type)
+    # Sort by rating, take top 30
+    seed_titles = sorted(
+        [w for w in seed_titles if w.get("tmdb_id") and w.get("rating")],
+        key=lambda x: x["rating"],
+        reverse=True,
+    )[:30]
 
+    scored: dict[int, float] = {}
+    scored_meta: dict[int, dict] = {}
+
+    for title in seed_titles:
+        candidates = get_recommendations_fn(title["tmdb_id"], title.get("type", "movie"))
+        weight = (title["rating"] or 5) / 10.0
         for c in candidates:
             cid = c.get("tmdb_id")
             if not cid:
                 continue
             if cid not in scored:
-                scored[cid] = {**c, "raw_score": 0.0}
-            scored[cid]["raw_score"] += weight
+                scored[cid] = 0.0
+                scored_meta[cid] = c
+            scored[cid] += weight
 
-    sorted_candidates = sorted(scored.values(), key=lambda x: x["raw_score"], reverse=True)
-    return sorted_candidates[:20]
+    # Apply type filter to candidates
+    if filter_type:
+        scored = {
+            cid: s for cid, s in scored.items()
+            if scored_meta[cid].get("type", "").lower() == filter_type.lower()
+        }
+
+    # Apply genre filter to candidates
+    if filter_genre:
+        scored = {
+            cid: s for cid, s in scored.items()
+            if filter_genre.lower() in (scored_meta[cid].get("genres") or "").lower()
+        }
+
+    top = sorted(scored.items(), key=lambda x: x[1], reverse=True)[:20]
+    return [scored_meta[cid] for cid, _ in top]
