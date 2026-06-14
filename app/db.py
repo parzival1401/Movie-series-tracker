@@ -148,14 +148,14 @@ def save_recommendations(
             [
                 {
                     "tmdb_id": r.get("tmdb_id"),
-                    "title": r.get("title", ""),
-                    "type": r.get("type", "movie"),
+                    "title": r.get("title") or "",
+                    "type": r.get("type") or "movie",
                     "year": r.get("year"),
                     "poster_url": r.get("poster_url"),
-                    "genres": r.get("genres", ""),
-                    "overview": r.get("overview", ""),
-                    "score": r.get("score", 0),
-                    "reason": r.get("reason", ""),
+                    "genres": r.get("genres") or "",
+                    "overview": r.get("overview") or "",
+                    "score": r.get("score") or 0,
+                    "reason": r.get("reason") or "",
                     "generated_date": today,
                     "filter_key": filter_key,
                 }
