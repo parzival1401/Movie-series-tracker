@@ -52,24 +52,38 @@
   </button>
 </div>
 
-<!-- Genre filter bar -->
-{% if genres_list %}
-<div class="flex items-center gap-3 mb-4">
-  <span class="text-xs text-gray-500 flex-none">Genre</span>
-  <div class="flex gap-2 overflow-x-auto flex-1" style="scrollbar-width: none">
-    <button class="genre-pill bg-teal-600 border border-teal-600 text-white text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap"
-            data-genre="all">
-      All Genres
+<!-- Genre filter -->
+<div class="mb-4">
+  <!-- Genre logic toggle -->
+  <div class="flex items-center gap-2 mb-2">
+    <span class="text-xs text-gray-500">Genre</span>
+    <span class="text-xs text-gray-600 ml-auto">Logic:</span>
+    <button id="logic-or"
+            class="text-xs px-2.5 py-1 rounded-l-full border border-r-0 bg-teal-600 text-white border-teal-600 transition">
+      Match ANY
     </button>
-    {% for genre in genres_list %}
+    <button id="logic-and"
+            class="text-xs px-2.5 py-1 rounded-r-full border bg-[#1a1a1a] text-gray-400 border-gray-700 transition">
+      Match ALL
+    </button>
+  </div>
+  <!-- Genre pills (scrollable) -->
+  <div class="flex gap-2 overflow-x-auto mb-2" style="scrollbar-width: none">
+    {% set genre_pills = ['Action','Adventure','Animation','Comedy','Crime','Drama','Fantasy','Horror','Mystery','Romance','Science Fiction','Thriller','Action & Adventure','Sci-Fi & Fantasy'] %}
+    {% for g in genre_pills %}
     <button class="genre-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
-            data-genre="{{ genre | lower }}">
-      {{ genre }}
+            data-genre-pill="{{ g }}">
+      {{ g }}
     </button>
     {% endfor %}
   </div>
+  <!-- Custom genre input -->
+  <input id="custom-genre-input" type="text"
+         placeholder="Add custom genre e.g. Martial Arts, Isekai..."
+         class="w-full bg-[#1a1a1a] border border-gray-700 text-white rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-gray-500" />
+  <!-- Active genre summary -->
+  <div id="filter-summary" class="hidden text-teal-400 text-xs mt-2"></div>
 </div>
-{% endif %}
 
 <!-- Rating filter bar -->
 <div class="flex items-center gap-3 mb-4">
@@ -217,44 +231,68 @@ const noResults    = document.getElementById('no-results');
 const clearBtn     = document.getElementById('search-clear');
 const resultsCount = document.getElementById('results-count');
 const clearAllBtn  = document.getElementById('clear-all-filters');
+const customGenreInput = document.getElementById('custom-genre-input');
+const summaryEl    = document.getElementById('filter-summary');
 
 const lengthFilterRow  = document.getElementById('length-filter-row');
 const seasonsFilterRow = document.getElementById('seasons-filter-row');
 const epsFilterRow     = document.getElementById('eps-filter-row');
 
-let activeFilter      = 'all';
-let activeGenre       = 'all';
-let activeMinRating   = 0;
-let activeLengthMax   = 0;
+let activeFilter        = 'all';
+let activeMinRating     = 0;
+let activeLengthMax     = 0;
 let activeSeasonsFilter = 0;
-let activeEpsFilter   = 0;
+let activeEpsFilter     = 0;
+let activeGenres        = new Set();
+let genreLogic          = 'or';
 
-// Style constants
 const typeActive   = ['bg-teal-500', 'text-black', 'border-teal-500'];
 const typeInactive = ['border-white/20', 'text-gray-400'];
 const pillActive   = ['bg-teal-600', 'border-teal-600', 'text-white'];
 const pillInactive = ['bg-[#1a1a1a]', 'border-gray-700', 'text-gray-300'];
 
 function updateFilterRowVisibility() {
-  const showLength  = activeFilter === 'all' || activeFilter === 'movie';
-  const showSeries  = activeFilter === 'all' || activeFilter === 'series';
+  const showLength = activeFilter === 'all' || activeFilter === 'movie';
+  const showSeries = activeFilter === 'all' || activeFilter === 'series';
   if (lengthFilterRow)  lengthFilterRow.style.display  = showLength ? '' : 'none';
   if (seasonsFilterRow) seasonsFilterRow.style.display = showSeries ? '' : 'none';
   if (epsFilterRow)     epsFilterRow.style.display     = showSeries ? '' : 'none';
 }
 
+function updateFilterSummary() {
+  const allActive = [...activeGenres];
+  const custom = customGenreInput.value.trim();
+  if (custom) allActive.push(custom);
+  if (allActive.length === 0) { summaryEl.classList.add('hidden'); return; }
+  const logicText = genreLogic === 'and' ? 'matching ALL' : 'matching ANY';
+  summaryEl.textContent = `Showing: ${allActive.join(' + ')} (${logicText})`;
+  summaryEl.classList.remove('hidden');
+}
+
 function filterCards() {
   const query = searchInput.value.toLowerCase().trim();
+  const customGenre = customGenreInput.value.toLowerCase().trim();
+
+  const allActiveGenres = new Set([...activeGenres].map(g => g.toLowerCase()));
+  if (customGenre) allActiveGenres.add(customGenre);
+
   let visible = 0;
   let denominator = 0;
 
   cards.forEach(card => {
     const titleMatch = card.dataset.title.includes(query);
-    const genreMatch = card.dataset.genres.includes(query);
-    const typeMatch  = activeFilter === 'all' || card.dataset.type === activeFilter;
+    const genreSearchMatch = card.dataset.genres.includes(query);
+    const typeMatch = activeFilter === 'all' || card.dataset.type === activeFilter;
 
-    const cardGenres = card.dataset.genres.split(',').map(g => g.trim().toLowerCase());
-    const genreFilterMatch = activeGenre === 'all' || cardGenres.includes(activeGenre);
+    let genreFilterMatch = true;
+    if (allActiveGenres.size > 0) {
+      const cardGenres = card.dataset.genres.split(',').map(g => g.trim().toLowerCase());
+      if (genreLogic === 'and') {
+        genreFilterMatch = [...allActiveGenres].every(g => cardGenres.some(cg => cg.includes(g)));
+      } else {
+        genreFilterMatch = [...allActiveGenres].some(g => cardGenres.some(cg => cg.includes(g)));
+      }
+    }
 
     const cardRating = parseInt(card.dataset.rating) || 0;
     const ratingMatch = cardRating >= activeMinRating;
@@ -283,11 +321,11 @@ function filterCards() {
       if (activeEpsFilter === 999) epsMatch = eps > 24;
     }
 
-    const show = (titleMatch || genreMatch) && typeMatch && genreFilterMatch &&
+    const show = (titleMatch || genreSearchMatch) && typeMatch && genreFilterMatch &&
                  ratingMatch && lengthMatch && seasonsMatch && epsMatch;
     card.style.display = show ? '' : 'none';
     if (show) visible++;
-    if (typeMatch && genreFilterMatch && ratingMatch) denominator++;
+    if (typeMatch && ratingMatch) denominator++;
   });
 
   if (noResults) noResults.classList.toggle('hidden', visible > 0);
@@ -299,41 +337,64 @@ function filterCards() {
       : `${denominator} title${denominator !== 1 ? 's' : ''}`;
   }
 
-  const anyActive = query !== '' || activeFilter !== 'all' || activeGenre !== 'all' ||
-                    activeMinRating > 0 || activeLengthMax > 0 ||
+  const anyActive = query !== '' || activeFilter !== 'all' || activeGenres.size > 0 ||
+                    customGenre !== '' || activeMinRating > 0 || activeLengthMax > 0 ||
                     activeSeasonsFilter > 0 || activeEpsFilter > 0;
   if (clearAllBtn) clearAllBtn.classList.toggle('hidden', !anyActive);
 
+  updateFilterSummary();
+
   // Sync URL state
   const params = new URLSearchParams();
-  if (query)                params.set('q',       query);
-  if (activeFilter !== 'all') params.set('type',  activeFilter);
-  if (activeGenre !== 'all')  params.set('genre', activeGenre);
-  if (activeMinRating > 0)    params.set('rating', activeMinRating);
-  if (activeLengthMax > 0)    params.set('length', activeLengthMax);
+  if (query)                  params.set('q',       query);
+  if (activeFilter !== 'all') params.set('type',    activeFilter);
+  if (activeGenres.size > 0)  params.set('genres',  [...activeGenres].join(','));
+  if (customGenre)            params.set('custom',  customGenreInput.value.trim());
+  if (genreLogic !== 'or')    params.set('logic',   genreLogic);
+  if (activeMinRating > 0)    params.set('rating',  activeMinRating);
+  if (activeLengthMax > 0)    params.set('length',  activeLengthMax);
   if (activeSeasonsFilter > 0) params.set('seasons', activeSeasonsFilter);
-  if (activeEpsFilter > 0)    params.set('eps',    activeEpsFilter);
+  if (activeEpsFilter > 0)    params.set('eps',     activeEpsFilter);
   history.replaceState({}, '', params.toString()
     ? `${window.location.pathname}?${params}`
     : window.location.pathname);
 }
 
-function setPill(selector, activeAttr, value, stateVar) {
+function setLogicButton(logic) {
+  genreLogic = logic;
+  const andBtn = document.getElementById('logic-and');
+  const orBtn  = document.getElementById('logic-or');
+  if (logic === 'and') {
+    andBtn.classList.add('bg-teal-600', 'text-white', 'border-teal-600');
+    andBtn.classList.remove('bg-[#1a1a1a]', 'text-gray-400', 'border-gray-700');
+    orBtn.classList.remove('bg-teal-600', 'text-white', 'border-teal-600');
+    orBtn.classList.add('bg-[#1a1a1a]', 'text-gray-400', 'border-gray-700');
+  } else {
+    orBtn.classList.add('bg-teal-600', 'text-white', 'border-teal-600');
+    orBtn.classList.remove('bg-[#1a1a1a]', 'text-gray-400', 'border-gray-700');
+    andBtn.classList.remove('bg-teal-600', 'text-white', 'border-teal-600');
+    andBtn.classList.add('bg-[#1a1a1a]', 'text-gray-400', 'border-gray-700');
+  }
+}
+
+function setPill(selector, attrName, value) {
   document.querySelectorAll(selector).forEach(p => {
     p.classList.remove(...pillActive); p.classList.add(...pillInactive);
   });
-  const target = document.querySelector(`${selector}[${activeAttr}="${value}"]`);
+  const target = document.querySelector(`${selector}[${attrName}="${value}"]`);
   if (target) { target.classList.remove(...pillInactive); target.classList.add(...pillActive); }
 }
 
 function resetAllFilters() {
-  searchInput.value   = '';
-  activeFilter        = 'all';
-  activeGenre         = 'all';
-  activeMinRating     = 0;
-  activeLengthMax     = 0;
-  activeSeasonsFilter = 0;
-  activeEpsFilter     = 0;
+  searchInput.value    = '';
+  customGenreInput.value = '';
+  activeFilter         = 'all';
+  activeMinRating      = 0;
+  activeLengthMax      = 0;
+  activeSeasonsFilter  = 0;
+  activeEpsFilter      = 0;
+  activeGenres.clear();
+  genreLogic           = 'or';
 
   document.querySelectorAll('.filter-btn').forEach(b => {
     b.classList.remove(...typeActive); b.classList.add(...typeInactive);
@@ -341,11 +402,14 @@ function resetAllFilters() {
   const allTypeBtn = document.querySelector('[data-filter="all"]');
   if (allTypeBtn) { allTypeBtn.classList.remove(...typeInactive); allTypeBtn.classList.add(...typeActive); }
 
-  setPill('.genre-pill',   'data-genre',        'all', activeGenre);
-  setPill('.rating-pill',  'data-rating',        '0',  activeMinRating);
-  setPill('.length-pill',  'data-length',        '0',  activeLengthMax);
-  setPill('.seasons-pill', 'data-seasons-filter','0',  activeSeasonsFilter);
-  setPill('.eps-pill',     'data-eps-filter',    '0',  activeEpsFilter);
+  document.querySelectorAll('.genre-pill').forEach(p => {
+    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
+  });
+  setPill('.rating-pill',  'data-rating',         '0');
+  setPill('.length-pill',  'data-length',         '0');
+  setPill('.seasons-pill', 'data-seasons-filter', '0');
+  setPill('.eps-pill',     'data-eps-filter',     '0');
+  setLogicButton('or');
 
   updateFilterRowVisibility();
   filterCards();
@@ -358,15 +422,14 @@ if (clearAllBtn) clearAllBtn.addEventListener('click', resetAllFilters);
 const noResultsClear = document.getElementById('no-results-clear');
 if (noResultsClear) noResultsClear.addEventListener('click', resetAllFilters);
 searchInput.addEventListener('input', filterCards);
+customGenreInput.addEventListener('input', filterCards);
 
 // Type filter buttons
 const filterBtns = document.querySelectorAll('.filter-btn');
 function setActiveFilter(btn) {
   filterBtns.forEach(b => { b.classList.remove(...typeActive); b.classList.add(...typeInactive); });
-  btn.classList.remove(...typeInactive);
-  btn.classList.add(...typeActive);
+  btn.classList.remove(...typeInactive); btn.classList.add(...typeActive);
   activeFilter = btn.dataset.filter;
-  // Reset format-specific filters when switching type
   if (activeFilter === 'movie')  { activeSeasonsFilter = 0; activeEpsFilter = 0;
     setPill('.seasons-pill','data-seasons-filter','0'); setPill('.eps-pill','data-eps-filter','0'); }
   if (activeFilter === 'series') { activeLengthMax = 0;
@@ -376,54 +439,49 @@ function setActiveFilter(btn) {
 }
 filterBtns.forEach(btn => btn.addEventListener('click', () => setActiveFilter(btn)));
 
-// Genre pills
-function setActiveGenre(pill) {
-  document.querySelectorAll('.genre-pill').forEach(p => {
-    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
+// Genre pills (multi-select toggle)
+document.querySelectorAll('.genre-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    const genre = pill.dataset.genrePill;
+    if (activeGenres.has(genre)) {
+      activeGenres.delete(genre);
+      pill.classList.remove(...pillActive); pill.classList.add(...pillInactive);
+    } else {
+      activeGenres.add(genre);
+      pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+    }
+    filterCards();
   });
-  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
-  activeGenre = pill.dataset.genre;
-  filterCards();
-}
-document.querySelectorAll('.genre-pill').forEach(pill => pill.addEventListener('click', () => setActiveGenre(pill)));
+});
+
+// AND/OR logic toggle
+document.getElementById('logic-and').addEventListener('click', () => { setLogicButton('and'); filterCards(); });
+document.getElementById('logic-or').addEventListener('click',  () => { setLogicButton('or');  filterCards(); });
 
 // Rating pills
-function setActiveRating(pill) {
-  document.querySelectorAll('.rating-pill').forEach(p => {
-    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
-  });
-  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+document.querySelectorAll('.rating-pill').forEach(pill => pill.addEventListener('click', () => {
+  setPill('.rating-pill', 'data-rating', pill.dataset.rating);
   activeMinRating = parseInt(pill.dataset.rating) || 0;
   filterCards();
-}
-document.querySelectorAll('.rating-pill').forEach(pill => pill.addEventListener('click', () => setActiveRating(pill)));
+}));
 
 // Length pills
 document.querySelectorAll('.length-pill').forEach(pill => pill.addEventListener('click', () => {
-  document.querySelectorAll('.length-pill').forEach(p => {
-    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
-  });
-  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+  setPill('.length-pill', 'data-length', pill.dataset.length);
   activeLengthMax = parseInt(pill.dataset.length) || 0;
   filterCards();
 }));
 
 // Seasons pills
 document.querySelectorAll('.seasons-pill').forEach(pill => pill.addEventListener('click', () => {
-  document.querySelectorAll('.seasons-pill').forEach(p => {
-    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
-  });
-  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+  setPill('.seasons-pill', 'data-seasons-filter', pill.dataset.seasonsFilter);
   activeSeasonsFilter = parseInt(pill.dataset.seasonsFilter) || 0;
   filterCards();
 }));
 
 // Episodes/season pills
 document.querySelectorAll('.eps-pill').forEach(pill => pill.addEventListener('click', () => {
-  document.querySelectorAll('.eps-pill').forEach(p => {
-    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
-  });
-  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+  setPill('.eps-pill', 'data-eps-filter', pill.dataset.epsFilter);
   activeEpsFilter = parseInt(pill.dataset.epsFilter) || 0;
   filterCards();
 }));
@@ -440,48 +498,46 @@ document.addEventListener('keydown', e => {
 const urlParams      = new URLSearchParams(window.location.search);
 const initialQuery   = urlParams.get('q')       || '';
 const initialFilter  = urlParams.get('type')    || 'all';
-const initialGenre   = urlParams.get('genre')   || 'all';
+const initialGenres  = urlParams.get('genres')  || '';
+const initialCustom  = urlParams.get('custom')  || '';
+const initialLogic   = urlParams.get('logic')   || 'or';
 const initialRating  = parseInt(urlParams.get('rating'))  || 0;
 const initialLength  = parseInt(urlParams.get('length'))  || 0;
 const initialSeasons = parseInt(urlParams.get('seasons')) || 0;
 const initialEps     = parseInt(urlParams.get('eps'))     || 0;
 
-if (initialQuery) searchInput.value = initialQuery;
+if (initialQuery)  searchInput.value = initialQuery;
+if (initialCustom) customGenreInput.value = initialCustom;
 
-if (initialGenre !== 'all') {
-  activeGenre = initialGenre;
-  const targetPill = document.querySelector(`.genre-pill[data-genre="${initialGenre}"]`);
-  if (targetPill) {
-    document.querySelectorAll('.genre-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); });
-    targetPill.classList.remove(...pillInactive); targetPill.classList.add(...pillActive);
-  }
+if (initialGenres) {
+  initialGenres.split(',').forEach(g => {
+    if (!g) return;
+    activeGenres.add(g);
+    const pill = document.querySelector(`.genre-pill[data-genre-pill="${g}"]`);
+    if (pill) { pill.classList.remove(...pillInactive); pill.classList.add(...pillActive); }
+  });
 }
+
+if (initialLogic !== 'or') setLogicButton(initialLogic);
 
 if (initialRating > 0) {
   activeMinRating = initialRating;
-  const t = document.querySelector(`.rating-pill[data-rating="${initialRating}"]`);
-  if (t) { document.querySelectorAll('.rating-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); }); t.classList.remove(...pillInactive); t.classList.add(...pillActive); }
+  setPill('.rating-pill', 'data-rating', String(initialRating));
 }
-
 if (initialLength > 0) {
   activeLengthMax = initialLength;
-  const t = document.querySelector(`.length-pill[data-length="${initialLength}"]`);
-  if (t) { document.querySelectorAll('.length-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); }); t.classList.remove(...pillInactive); t.classList.add(...pillActive); }
+  setPill('.length-pill', 'data-length', String(initialLength));
 }
-
 if (initialSeasons > 0) {
   activeSeasonsFilter = initialSeasons;
-  const t = document.querySelector(`.seasons-pill[data-seasons-filter="${initialSeasons}"]`);
-  if (t) { document.querySelectorAll('.seasons-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); }); t.classList.remove(...pillInactive); t.classList.add(...pillActive); }
+  setPill('.seasons-pill', 'data-seasons-filter', String(initialSeasons));
 }
-
 if (initialEps > 0) {
   activeEpsFilter = initialEps;
-  const t = document.querySelector(`.eps-pill[data-eps-filter="${initialEps}"]`);
-  if (t) { document.querySelectorAll('.eps-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); }); t.classList.remove(...pillInactive); t.classList.add(...pillActive); }
+  setPill('.eps-pill', 'data-eps-filter', String(initialEps));
 }
 
-// Triggers filterCards() + active type button + filter row visibility
+// Triggers filterCards() + type button active + filter row visibility
 const targetFilterBtn = document.querySelector(`[data-filter="${initialFilter}"]`);
 setActiveFilter(targetFilterBtn || document.querySelector('[data-filter="all"]'));
 </script>
