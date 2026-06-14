@@ -56,7 +56,6 @@
 
   <!-- Type buttons -->
   <div class="flex gap-2 text-sm">
-    {% set base = '/recommendations' ~ ('?genre=' ~ active_genre if active_genre else '') %}
     <a href="/recommendations{% if active_genre %}?genre={{ active_genre }}{% endif %}"
        class="px-4 py-1.5 rounded-full border transition
               {% if not active_type %}bg-teal-600 border-teal-600 text-white{% else %}border-white/20 text-gray-400 hover:text-white{% endif %}">
@@ -94,6 +93,51 @@
     {% endif %}
   </form>
 
+  <!-- Movie length filter -->
+  <div id="length-filter-row" class="flex items-center gap-3{% if active_type == 'series' %} hidden{% endif %}">
+    <span class="text-xs text-gray-500 flex-none">Length</span>
+    <div class="flex gap-2 flex-wrap">
+      <button class="length-pill bg-teal-600 border border-teal-600 text-white text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap"
+              data-length="0">Any</button>
+      <button class="length-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+              data-length="90">Short (&lt;90min)</button>
+      <button class="length-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+              data-length="150">Normal (90–150min)</button>
+      <button class="length-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+              data-length="999">Long (&gt;150min)</button>
+    </div>
+  </div>
+
+  <!-- Seasons filter -->
+  <div id="seasons-filter-row" class="flex items-center gap-3{% if active_type == 'movie' %} hidden{% endif %}">
+    <span class="text-xs text-gray-500 flex-none">Seasons</span>
+    <div class="flex gap-2 flex-wrap">
+      <button class="seasons-pill bg-teal-600 border border-teal-600 text-white text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap"
+              data-seasons-filter="0">Any</button>
+      <button class="seasons-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+              data-seasons-filter="1">1 Season</button>
+      <button class="seasons-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+              data-seasons-filter="3">2–3 Seasons</button>
+      <button class="seasons-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+              data-seasons-filter="4">4+ Seasons</button>
+    </div>
+  </div>
+
+  <!-- Episodes/season filter -->
+  <div id="eps-filter-row" class="flex items-center gap-3{% if active_type == 'movie' %} hidden{% endif %}">
+    <span class="text-xs text-gray-500 flex-none">Episodes/Season</span>
+    <div class="flex gap-2 flex-wrap">
+      <button class="eps-pill bg-teal-600 border border-teal-600 text-white text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap"
+              data-eps-filter="0">Any</button>
+      <button class="eps-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+              data-eps-filter="13">Short (&lt;13)</button>
+      <button class="eps-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+              data-eps-filter="24">Standard (13–24)</button>
+      <button class="eps-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+              data-eps-filter="999">Long (24+)</button>
+    </div>
+  </div>
+
 </div>
 
 <!-- Active filter summary + count -->
@@ -119,7 +163,10 @@
   <div id="rec-{{ rec.id }}"
        class="rec-card bg-[#1a1a1a] border border-white/10 rounded-xl flex gap-4 p-4 transition-opacity duration-500{% if rec.seen %} opacity-40{% endif %}"
        data-type="{{ rec.type or '' }}"
-       data-genres="{{ rec.genres | lower if rec.genres else '' }}">
+       data-genres="{{ rec.genres | lower if rec.genres else '' }}"
+       data-runtime="{{ rec.runtime or 0 }}"
+       data-seasons="{{ rec.total_seasons or 0 }}"
+       data-eps="{{ rec.episodes_per_season or 0 }}">
 
     <!-- Rank -->
     <div class="flex-none w-7 text-center pt-1">
@@ -188,16 +235,53 @@
 {% endif %}
 
 <script>
+const pillActive   = ['bg-teal-600', 'border-teal-600', 'text-white'];
+const pillInactive = ['bg-[#1a1a1a]', 'border-gray-700', 'text-gray-300'];
+
+let activeLengthMax     = 0;
+let activeSeasonsFilter = 0;
+let activeEpsFilter     = 0;
+
+const lengthFilterRow  = document.getElementById('length-filter-row');
+const seasonsFilterRow = document.getElementById('seasons-filter-row');
+const epsFilterRow     = document.getElementById('eps-filter-row');
+const serverTypeFilter = document.getElementById('js-type-filter').value; // 'movie'|'series'|''
+
 function filterRecs() {
-  const typeFilter = document.getElementById('js-type-filter').value;
+  const typeFilter  = serverTypeFilter;
   const genreFilter = document.getElementById('js-genre-input').value.toLowerCase().trim();
   const cards = document.querySelectorAll('.rec-card');
   let visible = 0;
 
   cards.forEach(card => {
-    const typeMatch = !typeFilter || card.dataset.type === typeFilter;
+    const typeMatch  = !typeFilter || card.dataset.type === typeFilter;
     const genreMatch = !genreFilter || card.dataset.genres.includes(genreFilter);
-    const show = typeMatch && genreMatch;
+
+    let lengthMatch = true;
+    if (activeLengthMax > 0) {
+      const runtime = parseInt(card.dataset.runtime) || 0;
+      if (activeLengthMax === 90)  lengthMatch = runtime > 0 && runtime < 90;
+      if (activeLengthMax === 150) lengthMatch = runtime >= 90 && runtime <= 150;
+      if (activeLengthMax === 999) lengthMatch = runtime > 150;
+    }
+
+    let seasonsMatch = true;
+    if (activeSeasonsFilter > 0) {
+      const seasons = parseInt(card.dataset.seasons) || 0;
+      if (activeSeasonsFilter === 1) seasonsMatch = seasons === 1;
+      if (activeSeasonsFilter === 3) seasonsMatch = seasons >= 2 && seasons <= 3;
+      if (activeSeasonsFilter === 4) seasonsMatch = seasons >= 4;
+    }
+
+    let epsMatch = true;
+    if (activeEpsFilter > 0) {
+      const eps = parseInt(card.dataset.eps) || 0;
+      if (activeEpsFilter === 13)  epsMatch = eps > 0 && eps < 13;
+      if (activeEpsFilter === 24)  epsMatch = eps >= 13 && eps <= 24;
+      if (activeEpsFilter === 999) epsMatch = eps > 24;
+    }
+
+    const show = typeMatch && genreMatch && lengthMatch && seasonsMatch && epsMatch;
     card.style.display = show ? '' : 'none';
     if (show) visible++;
   });
@@ -208,6 +292,30 @@ function filterRecs() {
   const noMsg = document.getElementById('no-recs-msg');
   if (noMsg) noMsg.classList.toggle('hidden', visible > 0);
 }
+
+// Length pills
+document.querySelectorAll('.length-pill').forEach(pill => pill.addEventListener('click', () => {
+  document.querySelectorAll('.length-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); });
+  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+  activeLengthMax = parseInt(pill.dataset.length) || 0;
+  filterRecs();
+}));
+
+// Seasons pills
+document.querySelectorAll('.seasons-pill').forEach(pill => pill.addEventListener('click', () => {
+  document.querySelectorAll('.seasons-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); });
+  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+  activeSeasonsFilter = parseInt(pill.dataset.seasonsFilter) || 0;
+  filterRecs();
+}));
+
+// Episodes/season pills
+document.querySelectorAll('.eps-pill').forEach(pill => pill.addEventListener('click', () => {
+  document.querySelectorAll('.eps-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); });
+  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+  activeEpsFilter = parseInt(pill.dataset.epsFilter) || 0;
+  filterRecs();
+}));
 
 async function markSeen(id) {
   const res = await fetch(`/recommendations/seen/${id}`, { method: 'POST' });

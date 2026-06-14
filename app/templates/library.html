@@ -72,7 +72,7 @@
 {% endif %}
 
 <!-- Rating filter bar -->
-<div class="flex items-center gap-3 mb-6">
+<div class="flex items-center gap-3 mb-4">
   <span class="text-xs text-gray-500 flex-none">Min Rating</span>
   <div class="flex gap-2 flex-wrap">
     <button class="rating-pill bg-teal-600 border border-teal-600 text-white text-xs w-9 h-9 rounded cursor-pointer text-center leading-9"
@@ -84,6 +84,51 @@
   </div>
 </div>
 
+<!-- Movie length filter (shown when type = movie or all) -->
+<div id="length-filter-row" class="flex items-center gap-3 mb-4">
+  <span class="text-xs text-gray-500 flex-none">Length</span>
+  <div class="flex gap-2 flex-wrap">
+    <button class="length-pill bg-teal-600 border border-teal-600 text-white text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap"
+            data-length="0">Any</button>
+    <button class="length-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-length="90">Short (&lt;90min)</button>
+    <button class="length-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-length="150">Normal (90–150min)</button>
+    <button class="length-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-length="999">Long (&gt;150min)</button>
+  </div>
+</div>
+
+<!-- Seasons filter (shown when type = series or all) -->
+<div id="seasons-filter-row" class="flex items-center gap-3 mb-4">
+  <span class="text-xs text-gray-500 flex-none">Seasons</span>
+  <div class="flex gap-2 flex-wrap">
+    <button class="seasons-pill bg-teal-600 border border-teal-600 text-white text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap"
+            data-seasons-filter="0">Any</button>
+    <button class="seasons-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-seasons-filter="1">1 Season</button>
+    <button class="seasons-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-seasons-filter="3">2–3 Seasons</button>
+    <button class="seasons-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-seasons-filter="4">4+ Seasons</button>
+  </div>
+</div>
+
+<!-- Episodes/season filter (shown when type = series or all) -->
+<div id="eps-filter-row" class="flex items-center gap-3 mb-6">
+  <span class="text-xs text-gray-500 flex-none">Episodes/Season</span>
+  <div class="flex gap-2 flex-wrap">
+    <button class="eps-pill bg-teal-600 border border-teal-600 text-white text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap"
+            data-eps-filter="0">Any</button>
+    <button class="eps-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-eps-filter="13">Short (&lt;13)</button>
+    <button class="eps-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-eps-filter="24">Standard (13–24)</button>
+    <button class="eps-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-eps-filter="999">Long (24+)</button>
+  </div>
+</div>
+
 {% if items %}
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
   {% for item in items %}
@@ -92,7 +137,10 @@
        data-title="{{ item.title | lower }}"
        data-type="{{ item.type }}"
        data-genres="{{ item.genres | lower if item.genres else '' }}"
-       data-rating="{{ item.rating or 0 }}">
+       data-rating="{{ item.rating or 0 }}"
+       data-runtime="{{ item.runtime or 0 }}"
+       data-seasons="{{ item.total_seasons or 0 }}"
+       data-eps="{{ item.episodes_per_season or 0 }}">
 
     {% if item.poster_url %}
     <img src="{{ item.poster_url }}" alt="{{ item.title }}"
@@ -163,22 +211,37 @@ async function removeCard(id) {
   }
 }
 
-const searchInput = document.getElementById('library-search');
-const cards = document.querySelectorAll('.title-card');
-const noResults = document.getElementById('no-results');
-const clearBtn = document.getElementById('search-clear');
+const searchInput  = document.getElementById('library-search');
+const cards        = document.querySelectorAll('.title-card');
+const noResults    = document.getElementById('no-results');
+const clearBtn     = document.getElementById('search-clear');
 const resultsCount = document.getElementById('results-count');
-const clearAllBtn = document.getElementById('clear-all-filters');
+const clearAllBtn  = document.getElementById('clear-all-filters');
 
-let activeFilter = 'all';
-let activeGenre = 'all';
-let activeMinRating = 0;
+const lengthFilterRow  = document.getElementById('length-filter-row');
+const seasonsFilterRow = document.getElementById('seasons-filter-row');
+const epsFilterRow     = document.getElementById('eps-filter-row');
+
+let activeFilter      = 'all';
+let activeGenre       = 'all';
+let activeMinRating   = 0;
+let activeLengthMax   = 0;
+let activeSeasonsFilter = 0;
+let activeEpsFilter   = 0;
 
 // Style constants
 const typeActive   = ['bg-teal-500', 'text-black', 'border-teal-500'];
 const typeInactive = ['border-white/20', 'text-gray-400'];
 const pillActive   = ['bg-teal-600', 'border-teal-600', 'text-white'];
 const pillInactive = ['bg-[#1a1a1a]', 'border-gray-700', 'text-gray-300'];
+
+function updateFilterRowVisibility() {
+  const showLength  = activeFilter === 'all' || activeFilter === 'movie';
+  const showSeries  = activeFilter === 'all' || activeFilter === 'series';
+  if (lengthFilterRow)  lengthFilterRow.style.display  = showLength ? '' : 'none';
+  if (seasonsFilterRow) seasonsFilterRow.style.display = showSeries ? '' : 'none';
+  if (epsFilterRow)     epsFilterRow.style.display     = showSeries ? '' : 'none';
+}
 
 function filterCards() {
   const query = searchInput.value.toLowerCase().trim();
@@ -196,7 +259,32 @@ function filterCards() {
     const cardRating = parseInt(card.dataset.rating) || 0;
     const ratingMatch = cardRating >= activeMinRating;
 
-    const show = (titleMatch || genreMatch) && typeMatch && genreFilterMatch && ratingMatch;
+    let lengthMatch = true;
+    if (activeLengthMax > 0) {
+      const runtime = parseInt(card.dataset.runtime) || 0;
+      if (activeLengthMax === 90)  lengthMatch = runtime > 0 && runtime < 90;
+      if (activeLengthMax === 150) lengthMatch = runtime >= 90 && runtime <= 150;
+      if (activeLengthMax === 999) lengthMatch = runtime > 150;
+    }
+
+    let seasonsMatch = true;
+    if (activeSeasonsFilter > 0) {
+      const seasons = parseInt(card.dataset.seasons) || 0;
+      if (activeSeasonsFilter === 1) seasonsMatch = seasons === 1;
+      if (activeSeasonsFilter === 3) seasonsMatch = seasons >= 2 && seasons <= 3;
+      if (activeSeasonsFilter === 4) seasonsMatch = seasons >= 4;
+    }
+
+    let epsMatch = true;
+    if (activeEpsFilter > 0) {
+      const eps = parseInt(card.dataset.eps) || 0;
+      if (activeEpsFilter === 13)  epsMatch = eps > 0 && eps < 13;
+      if (activeEpsFilter === 24)  epsMatch = eps >= 13 && eps <= 24;
+      if (activeEpsFilter === 999) epsMatch = eps > 24;
+    }
+
+    const show = (titleMatch || genreMatch) && typeMatch && genreFilterMatch &&
+                 ratingMatch && lengthMatch && seasonsMatch && epsMatch;
     card.style.display = show ? '' : 'none';
     if (show) visible++;
     if (typeMatch && genreFilterMatch && ratingMatch) denominator++;
@@ -211,48 +299,55 @@ function filterCards() {
       : `${denominator} title${denominator !== 1 ? 's' : ''}`;
   }
 
-  const anyActive = query !== '' || activeFilter !== 'all' || activeGenre !== 'all' || activeMinRating > 0;
+  const anyActive = query !== '' || activeFilter !== 'all' || activeGenre !== 'all' ||
+                    activeMinRating > 0 || activeLengthMax > 0 ||
+                    activeSeasonsFilter > 0 || activeEpsFilter > 0;
   if (clearAllBtn) clearAllBtn.classList.toggle('hidden', !anyActive);
 
   // Sync URL state
   const params = new URLSearchParams();
-  if (query) params.set('q', query);
-  if (activeFilter !== 'all') params.set('type', activeFilter);
-  if (activeGenre !== 'all') params.set('genre', activeGenre);
-  if (activeMinRating > 0) params.set('rating', activeMinRating);
+  if (query)                params.set('q',       query);
+  if (activeFilter !== 'all') params.set('type',  activeFilter);
+  if (activeGenre !== 'all')  params.set('genre', activeGenre);
+  if (activeMinRating > 0)    params.set('rating', activeMinRating);
+  if (activeLengthMax > 0)    params.set('length', activeLengthMax);
+  if (activeSeasonsFilter > 0) params.set('seasons', activeSeasonsFilter);
+  if (activeEpsFilter > 0)    params.set('eps',    activeEpsFilter);
   history.replaceState({}, '', params.toString()
     ? `${window.location.pathname}?${params}`
     : window.location.pathname);
 }
 
-function resetAllFilters() {
-  searchInput.value = '';
-  activeFilter = 'all';
-  activeGenre = 'all';
-  activeMinRating = 0;
+function setPill(selector, activeAttr, value, stateVar) {
+  document.querySelectorAll(selector).forEach(p => {
+    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
+  });
+  const target = document.querySelector(`${selector}[${activeAttr}="${value}"]`);
+  if (target) { target.classList.remove(...pillInactive); target.classList.add(...pillActive); }
+}
 
-  // Reset type buttons
+function resetAllFilters() {
+  searchInput.value   = '';
+  activeFilter        = 'all';
+  activeGenre         = 'all';
+  activeMinRating     = 0;
+  activeLengthMax     = 0;
+  activeSeasonsFilter = 0;
+  activeEpsFilter     = 0;
+
   document.querySelectorAll('.filter-btn').forEach(b => {
-    b.classList.remove(...typeActive);
-    b.classList.add(...typeInactive);
+    b.classList.remove(...typeActive); b.classList.add(...typeInactive);
   });
   const allTypeBtn = document.querySelector('[data-filter="all"]');
   if (allTypeBtn) { allTypeBtn.classList.remove(...typeInactive); allTypeBtn.classList.add(...typeActive); }
 
-  // Reset genre pills
-  document.querySelectorAll('.genre-pill').forEach(p => {
-    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
-  });
-  const allGenrePill = document.querySelector('.genre-pill[data-genre="all"]');
-  if (allGenrePill) { allGenrePill.classList.remove(...pillInactive); allGenrePill.classList.add(...pillActive); }
+  setPill('.genre-pill',   'data-genre',        'all', activeGenre);
+  setPill('.rating-pill',  'data-rating',        '0',  activeMinRating);
+  setPill('.length-pill',  'data-length',        '0',  activeLengthMax);
+  setPill('.seasons-pill', 'data-seasons-filter','0',  activeSeasonsFilter);
+  setPill('.eps-pill',     'data-eps-filter',    '0',  activeEpsFilter);
 
-  // Reset rating pills
-  document.querySelectorAll('.rating-pill').forEach(p => {
-    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
-  });
-  const anyRatingPill = document.querySelector('.rating-pill[data-rating="0"]');
-  if (anyRatingPill) { anyRatingPill.classList.remove(...pillInactive); anyRatingPill.classList.add(...pillActive); }
-
+  updateFilterRowVisibility();
   filterCards();
   searchInput.focus();
 }
@@ -266,39 +361,72 @@ searchInput.addEventListener('input', filterCards);
 
 // Type filter buttons
 const filterBtns = document.querySelectorAll('.filter-btn');
-
 function setActiveFilter(btn) {
   filterBtns.forEach(b => { b.classList.remove(...typeActive); b.classList.add(...typeInactive); });
   btn.classList.remove(...typeInactive);
   btn.classList.add(...typeActive);
   activeFilter = btn.dataset.filter;
+  // Reset format-specific filters when switching type
+  if (activeFilter === 'movie')  { activeSeasonsFilter = 0; activeEpsFilter = 0;
+    setPill('.seasons-pill','data-seasons-filter','0'); setPill('.eps-pill','data-eps-filter','0'); }
+  if (activeFilter === 'series') { activeLengthMax = 0;
+    setPill('.length-pill','data-length','0'); }
+  updateFilterRowVisibility();
   filterCards();
 }
 filterBtns.forEach(btn => btn.addEventListener('click', () => setActiveFilter(btn)));
 
-// Genre pill buttons
+// Genre pills
 function setActiveGenre(pill) {
   document.querySelectorAll('.genre-pill').forEach(p => {
     p.classList.remove(...pillActive); p.classList.add(...pillInactive);
   });
-  pill.classList.remove(...pillInactive);
-  pill.classList.add(...pillActive);
+  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
   activeGenre = pill.dataset.genre;
   filterCards();
 }
 document.querySelectorAll('.genre-pill').forEach(pill => pill.addEventListener('click', () => setActiveGenre(pill)));
 
-// Rating pill buttons
+// Rating pills
 function setActiveRating(pill) {
   document.querySelectorAll('.rating-pill').forEach(p => {
     p.classList.remove(...pillActive); p.classList.add(...pillInactive);
   });
-  pill.classList.remove(...pillInactive);
-  pill.classList.add(...pillActive);
+  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
   activeMinRating = parseInt(pill.dataset.rating) || 0;
   filterCards();
 }
 document.querySelectorAll('.rating-pill').forEach(pill => pill.addEventListener('click', () => setActiveRating(pill)));
+
+// Length pills
+document.querySelectorAll('.length-pill').forEach(pill => pill.addEventListener('click', () => {
+  document.querySelectorAll('.length-pill').forEach(p => {
+    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
+  });
+  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+  activeLengthMax = parseInt(pill.dataset.length) || 0;
+  filterCards();
+}));
+
+// Seasons pills
+document.querySelectorAll('.seasons-pill').forEach(pill => pill.addEventListener('click', () => {
+  document.querySelectorAll('.seasons-pill').forEach(p => {
+    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
+  });
+  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+  activeSeasonsFilter = parseInt(pill.dataset.seasonsFilter) || 0;
+  filterCards();
+}));
+
+// Episodes/season pills
+document.querySelectorAll('.eps-pill').forEach(pill => pill.addEventListener('click', () => {
+  document.querySelectorAll('.eps-pill').forEach(p => {
+    p.classList.remove(...pillActive); p.classList.add(...pillInactive);
+  });
+  pill.classList.remove(...pillInactive); pill.classList.add(...pillActive);
+  activeEpsFilter = parseInt(pill.dataset.epsFilter) || 0;
+  filterCards();
+}));
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
@@ -309,11 +437,14 @@ document.addEventListener('keydown', e => {
 });
 
 // Restore state from URL on load
-const urlParams = new URLSearchParams(window.location.search);
-const initialQuery  = urlParams.get('q') || '';
-const initialFilter = urlParams.get('type') || 'all';
-const initialGenre  = urlParams.get('genre') || 'all';
-const initialRating = parseInt(urlParams.get('rating')) || 0;
+const urlParams      = new URLSearchParams(window.location.search);
+const initialQuery   = urlParams.get('q')       || '';
+const initialFilter  = urlParams.get('type')    || 'all';
+const initialGenre   = urlParams.get('genre')   || 'all';
+const initialRating  = parseInt(urlParams.get('rating'))  || 0;
+const initialLength  = parseInt(urlParams.get('length'))  || 0;
+const initialSeasons = parseInt(urlParams.get('seasons')) || 0;
+const initialEps     = parseInt(urlParams.get('eps'))     || 0;
 
 if (initialQuery) searchInput.value = initialQuery;
 
@@ -328,14 +459,29 @@ if (initialGenre !== 'all') {
 
 if (initialRating > 0) {
   activeMinRating = initialRating;
-  const targetRating = document.querySelector(`.rating-pill[data-rating="${initialRating}"]`);
-  if (targetRating) {
-    document.querySelectorAll('.rating-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); });
-    targetRating.classList.remove(...pillInactive); targetRating.classList.add(...pillActive);
-  }
+  const t = document.querySelector(`.rating-pill[data-rating="${initialRating}"]`);
+  if (t) { document.querySelectorAll('.rating-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); }); t.classList.remove(...pillInactive); t.classList.add(...pillActive); }
 }
 
-// Triggers filterCards() and sets type button active state
+if (initialLength > 0) {
+  activeLengthMax = initialLength;
+  const t = document.querySelector(`.length-pill[data-length="${initialLength}"]`);
+  if (t) { document.querySelectorAll('.length-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); }); t.classList.remove(...pillInactive); t.classList.add(...pillActive); }
+}
+
+if (initialSeasons > 0) {
+  activeSeasonsFilter = initialSeasons;
+  const t = document.querySelector(`.seasons-pill[data-seasons-filter="${initialSeasons}"]`);
+  if (t) { document.querySelectorAll('.seasons-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); }); t.classList.remove(...pillInactive); t.classList.add(...pillActive); }
+}
+
+if (initialEps > 0) {
+  activeEpsFilter = initialEps;
+  const t = document.querySelector(`.eps-pill[data-eps-filter="${initialEps}"]`);
+  if (t) { document.querySelectorAll('.eps-pill').forEach(p => { p.classList.remove(...pillActive); p.classList.add(...pillInactive); }); t.classList.remove(...pillInactive); t.classList.add(...pillActive); }
+}
+
+// Triggers filterCards() + active type button + filter row visibility
 const targetFilterBtn = document.querySelector(`[data-filter="${initialFilter}"]`);
 setActiveFilter(targetFilterBtn || document.querySelector('[data-filter="all"]'));
 </script>
