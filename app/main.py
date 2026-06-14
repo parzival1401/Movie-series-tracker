@@ -195,24 +195,30 @@ def similar(request: Request, tmdb_id: int, media_type: str):
 # Recommendations
 # ---------------------------------------------------------------------------
 
-def _build_and_save_recs():
+def _build_and_save_recs() -> str | None:
     watched = db.get_all_watched()
     watched_ids = db.get_watched_tmdb_ids()
     candidates = gemini.aggregate_tmdb_recs(watched, tmdb.get_recommendations)
     candidates = [c for c in candidates if c["tmdb_id"] not in watched_ids]
     final = gemini.rerank_recommendations(watched, candidates)
+    if final == "quota_exceeded":
+        return "quota_exceeded"
     candidate_map = {c["tmdb_id"]: c for c in candidates}
     for item in final:
         if not item.get("poster_url"):
             item["poster_url"] = candidate_map.get(item["tmdb_id"], {}).get("poster_url")
     db.save_recommendations(final)
+    return None
 
 
 @app.get("/recommendations")
 def recommendations(request: Request):
     last_date = db.get_last_rec_date()
+    error = None
     if gemini.should_refresh(last_date):
-        _build_and_save_recs()
+        result = _build_and_save_recs()
+        if result == "quota_exceeded":
+            error = "Gemini quota exceeded. Showing previous results. Try again tomorrow."
     recs = db.get_recommendations()
     last_date = db.get_last_rec_date()
     providers = {
@@ -222,7 +228,7 @@ def recommendations(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="recommendations.html",
-        context={"recs": recs, "last_date": last_date, "providers": providers},
+        context={"recs": recs, "last_date": last_date, "providers": providers, "error": error},
     )
 
 

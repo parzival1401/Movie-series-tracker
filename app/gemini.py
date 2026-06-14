@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types
 
 _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
-_MODEL = "gemini-2.0-flash"
+_MODEL = "gemini-1.5-flash"
 
 TASTE_PROFILE = """
 [I WILL FILL THIS IN — DO NOT CHANGE THIS LINE]
@@ -89,7 +89,12 @@ def rerank_recommendations(watched_list: list[dict], candidates: list[dict]) -> 
         required = {"tmdb_id", "title", "score", "reason"}
         validated = [item for item in parsed if required.issubset(item.keys())]
         return validated
-    except Exception:
+    except Exception as e:
+        error_str = str(e)
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+            print("Gemini quota exceeded — try again later or tomorrow")
+            return "quota_exceeded"
+        print(f"Gemini error: {e}")
         return []
 
 
