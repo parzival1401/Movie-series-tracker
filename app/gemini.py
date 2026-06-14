@@ -6,8 +6,15 @@ from typing import Callable
 from google import genai
 from google.genai import types
 
-_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
-_MODEL = "gemini-1.5-flash"
+_client = None
+_MODEL = "models/gemini-2.0-flash-lite"
+
+
+def get_client():
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    return _client
 
 TASTE_PROFILE = """
 [I WILL FILL THIS IN — DO NOT CHANGE THIS LINE]
@@ -71,7 +78,7 @@ Order by score descending."""
 def rerank_recommendations(watched_list: list[dict], candidates: list[dict]) -> list[dict]:
     try:
         prompt = build_prompt(watched_list, candidates)
-        response = _client.models.generate_content(
+        response = get_client().models.generate_content(
             model=_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
