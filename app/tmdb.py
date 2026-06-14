@@ -1,10 +1,10 @@
 import os
 import time
 import requests
+from itertools import zip_longest
 
 _BASE = "https://api.themoviedb.org/3"
 _POSTER_BASE = "https://image.tmdb.org/t/p/w300"
-
 _LOGO_BASE = "https://image.tmdb.org/t/p/w45"
 
 _genre_cache: dict[str, dict[int, str]] = {"movie": {}, "series": {}}
@@ -56,26 +56,50 @@ def _map_result(item: dict, media_type: str) -> dict:
     }
 
 
-def _search_endpoint(query: str, media_type: str) -> dict | None:
+def _search_raw(name: str, media_type: str) -> list[dict]:
     endpoint = "movie" if media_type == "movie" else "tv"
-    data = _get(f"{_BASE}/search/{endpoint}", params={"query": query, "page": 1})
+    data = _get(f"{_BASE}/search/{endpoint}", params={"query": name, "include_adult": False, "page": 1})
     if not data:
-        return None
+        return []
     results = data.get("results", [])
-    if not results:
-        return None
-    result = _map_result(results[0], media_type)
-    result["source"] = "tmdb"
-    return result
+    mapped = []
+    for r in results[:8]:
+        item = _map_result(r, media_type)
+        item["type"] = media_type
+        item["vote_average"] = round(r.get("vote_average", 0), 1)
+        item["source"] = "tmdb"
+        mapped.append(item)
+    time.sleep(0.25)
+    return mapped
+
+
+def _search_endpoint(query: str, media_type: str) -> dict | None:
+    results = _search_raw(query, media_type)
+    return results[0] if results else None
+
+
+def search_titles_multi(name: str, media_type: str, max_results: int = 8) -> list[dict]:
+    if not name.strip():
+        return []
+    if media_type == "both":
+        movie_results = _search_raw(name, "movie")
+        series_results = _search_raw(name, "series")
+        combined = []
+        for pair in zip_longest(movie_results, series_results):
+            combined.extend(r for r in pair if r is not None)
+        return combined[:max_results]
+    return _search_raw(name, media_type)[:max_results]
+
+
+def _search_title_single(query: str, media_type: str) -> dict | None:
+    return _search_endpoint(query, media_type)
 
 
 def smart_search_tmdb(title: str, media_type: str) -> dict | None:
-    # Strategy 1: exact title, correct media_type
     result = _search_endpoint(title, media_type)
     if result:
         return result
 
-    # Strategy 2: strip subtitle after colon
     if ":" in title:
         time.sleep(0.25)
         after_colon = title.split(":", 1)[1].strip()
@@ -83,7 +107,6 @@ def smart_search_tmdb(title: str, media_type: str) -> dict | None:
         if result:
             return result
 
-    # Strategy 3: flip media_type
     time.sleep(0.25)
     alt_type = "series" if media_type == "movie" else "movie"
     return _search_endpoint(title, alt_type)

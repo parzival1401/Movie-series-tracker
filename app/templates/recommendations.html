@@ -77,7 +77,13 @@
     </div>
 
     <!-- Action -->
-    <div class="flex-none self-center">
+    <div class="flex-none self-center flex flex-col gap-2 items-end">
+      {% if rec.title %}
+      <a href="/search?q={{ rec.title | urlencode }}&type={{ rec.type or 'movie' }}"
+         class="text-xs bg-white text-black font-medium px-3 py-1.5 rounded-lg hover:bg-gray-200 transition whitespace-nowrap">
+        + Add
+      </a>
+      {% endif %}
       {% if not rec.seen %}
       <button onclick="markSeen({{ rec.id }})"
               class="text-xs text-gray-500 hover:text-white border border-white/10 hover:border-white/30 px-3 py-1.5 rounded-lg transition whitespace-nowrap">

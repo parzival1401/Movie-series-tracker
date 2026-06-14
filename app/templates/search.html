@@ -4,18 +4,23 @@
 
 <h1 class="text-2xl font-bold mb-6">Search</h1>
 
-<div class="flex flex-col sm:flex-row gap-3 mb-8">
+<div class="flex flex-col sm:flex-row gap-3 mb-4">
   <input id="q" type="text" placeholder="Title name…"
+         value="{{ initial_q }}"
          class="flex-1 bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-white/40"
          onkeydown="if(event.key==='Enter') doSearch()" />
   <div class="flex gap-2">
     <button id="btn-movie" onclick="setType('movie')"
-            class="px-4 py-2 rounded-xl text-sm font-medium border bg-white text-black border-white transition">
-      Movie
+            class="px-4 py-2 rounded-xl text-sm font-medium border border-white/20 text-gray-400 hover:text-white transition">
+      Movies
     </button>
     <button id="btn-series" onclick="setType('series')"
             class="px-4 py-2 rounded-xl text-sm font-medium border border-white/20 text-gray-400 hover:text-white transition">
       Series
+    </button>
+    <button id="btn-both" onclick="setType('both')"
+            class="px-4 py-2 rounded-xl text-sm font-medium border bg-white text-black border-white transition">
+      Both
     </button>
     <button onclick="doSearch()"
             class="px-5 py-2 rounded-xl text-sm font-medium bg-white text-black hover:bg-gray-200 transition">
@@ -24,56 +29,84 @@
   </div>
 </div>
 
-<div id="results" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+<p id="result-count" class="text-xs text-gray-500 mb-4 hidden"></p>
+
+<div id="results" class="flex flex-col gap-3"></div>
+
 <p id="empty-msg" class="hidden text-gray-500 text-sm">
-  No results found. &nbsp;
-  <a href="/add/manual" class="text-teal-400 hover:text-teal-300 underline">Can't find it? Add manually →</a>
+  No results found. Try a different spelling or
+  <a href="/add/manual" class="text-teal-400 hover:text-teal-300 underline">add manually →</a>
 </p>
 
 <script>
-let currentType = 'movie';
+let currentType = '{{ initial_type }}';
+
+const activeClass = 'px-4 py-2 rounded-xl text-sm font-medium border bg-white text-black border-white transition';
+const inactiveClass = 'px-4 py-2 rounded-xl text-sm font-medium border border-white/20 text-gray-400 hover:text-white transition';
 
 function setType(t) {
   currentType = t;
-  const active = 'px-4 py-2 rounded-xl text-sm font-medium border bg-white text-black border-white transition';
-  const inactive = 'px-4 py-2 rounded-xl text-sm font-medium border border-white/20 text-gray-400 hover:text-white transition';
-  document.getElementById('btn-movie').className = t === 'movie' ? active : inactive;
-  document.getElementById('btn-series').className = t === 'series' ? active : inactive;
+  document.getElementById('btn-movie').className  = t === 'movie'  ? activeClass : inactiveClass;
+  document.getElementById('btn-series').className = t === 'series' ? activeClass : inactiveClass;
+  document.getElementById('btn-both').className   = t === 'both'   ? activeClass : inactiveClass;
 }
+
+// Apply initial type from URL param
+setType(currentType);
 
 async function doSearch() {
   const q = document.getElementById('q').value.trim();
   if (!q) return;
   const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${currentType}`);
   const data = await res.json();
-  renderResults(data);
+  renderResults(data, q);
 }
 
-function renderResults(items) {
+function renderResults(items, query) {
   const container = document.getElementById('results');
   const empty = document.getElementById('empty-msg');
+  const count = document.getElementById('result-count');
   container.innerHTML = '';
-  if (!items.length) { empty.classList.remove('hidden'); return; }
+
+  if (!items.length) {
+    empty.classList.remove('hidden');
+    count.classList.add('hidden');
+    return;
+  }
   empty.classList.add('hidden');
+  count.textContent = `Found ${items.length} result${items.length !== 1 ? 's' : ''} for "${query}"`;
+  count.classList.remove('hidden');
 
   items.forEach(item => {
-    const overview = item.overview ? item.overview.slice(0, 100) + (item.overview.length > 100 ? '…' : '') : '';
+    const overview = item.overview ? item.overview.slice(0, 120) + (item.overview.length > 120 ? '…' : '') : '';
     const poster = item.poster_url
-      ? `<img src="${item.poster_url}" class="w-full aspect-[2/3] object-cover" />`
-      : `<div class="w-full aspect-[2/3] bg-[#2a2a2a] flex items-center justify-center"><span class="text-gray-500 text-xs px-2 text-center">${escHtml(item.title)}</span></div>`;
+      ? `<img src="${item.poster_url}" class="w-16 flex-none aspect-[2/3] object-cover rounded-lg" />`
+      : `<div class="w-16 flex-none aspect-[2/3] bg-[#2a2a2a] rounded-lg flex items-center justify-center"><span class="text-gray-500 text-xs px-1 text-center">${escHtml(item.title)}</span></div>`;
+
+    const typeBadge = `<span class="text-xs bg-white/10 text-gray-300 px-1.5 py-0.5 rounded capitalize">${item.type}</span>`;
+    const scoreBadge = item.vote_average
+      ? `<span class="text-xs text-yellow-300">⭐ ${item.vote_average}</span>`
+      : '';
 
     const card = document.createElement('div');
-    card.className = 'bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden flex flex-col';
+    card.className = 'bg-[#1a1a1a] rounded-xl border border-white/10 flex gap-4 p-3';
     card.innerHTML = `
       ${poster}
-      <div class="p-3 flex flex-col gap-2 flex-1">
-        <p class="font-semibold text-sm">${escHtml(item.title)}</p>
-        <p class="text-xs text-gray-500">${item.year || ''} · ${escHtml(item.genres || '')}</p>
+      <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+        <p class="font-semibold text-sm leading-tight">${escHtml(item.title)}</p>
+        <div class="flex items-center gap-2 flex-wrap">
+          ${item.year ? `<span class="text-xs text-gray-500">${item.year}</span>` : ''}
+          ${typeBadge}
+          ${scoreBadge}
+        </div>
+        ${item.genres ? `<p class="text-xs text-gray-500">${escHtml(item.genres)}</p>` : ''}
         ${overview ? `<p class="text-xs text-gray-400 leading-relaxed">${escHtml(overview)}</p>` : ''}
-        <button class="add-btn mt-auto text-xs bg-white text-black font-medium py-1.5 rounded-lg hover:bg-gray-200 transition">
-          + Add to Library
+        <div class="add-form mt-1"></div>
+      </div>
+      <div class="flex-none self-start pt-0.5">
+        <button class="add-btn text-xs bg-white text-black font-medium px-3 py-1.5 rounded-lg hover:bg-gray-200 transition whitespace-nowrap">
+          + Add
         </button>
-        <div class="add-form hidden"></div>
       </div>`;
 
     const btn = card.querySelector('.add-btn');
@@ -87,16 +120,15 @@ function escHtml(s) {
 }
 
 function toggleAddForm(btn, item) {
-  const formDiv = btn.nextElementSibling;
-  if (!formDiv.classList.contains('hidden')) { formDiv.classList.add('hidden'); return; }
-  formDiv.classList.remove('hidden');
-  formDiv.innerHTML = buildFormHtml(item, currentType);
+  const formDiv = btn.closest('.bg-\\[\\#1a1a1a\\]').querySelector('.add-form');
+  if (formDiv.innerHTML) { formDiv.innerHTML = ''; return; }
+  formDiv.innerHTML = buildFormHtml(item, item.type || currentType);
   formDiv.querySelector('form').addEventListener('submit', e => submitAdd(e, formDiv.querySelector('form')));
 }
 
 function buildFormHtml(item, type) {
   return `
-    <form class="flex flex-col gap-2 mt-1">
+    <form class="flex flex-col gap-2">
       <input type="hidden" name="tmdb_id" value="${item.tmdb_id}" />
       <input type="hidden" name="title" value="${escHtml(item.title)}" />
       <input type="hidden" name="type" value="${type}" />
@@ -133,6 +165,12 @@ async function submitAdd(e, form) {
     status.className = 'status text-xs text-center text-red-400';
   }
 }
+
+// Auto-search if URL had ?q= param
+window.addEventListener('DOMContentLoaded', () => {
+  const q = document.getElementById('q').value.trim();
+  if (q) doSearch();
+});
 </script>
 
 {% endblock %}

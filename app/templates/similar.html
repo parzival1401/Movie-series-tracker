@@ -76,16 +76,10 @@
 
       {{ provider_logos(p) }}
 
-      <button class="add-btn mt-auto text-xs bg-white text-black font-medium py-1.5 rounded-lg hover:bg-gray-200 transition"
-              data-id="{{ item.tmdb_id }}"
-              data-title="{{ item.title }}"
-              data-year="{{ item.year or '' }}"
-              data-poster="{{ item.poster_url or '' }}"
-              data-genres="{{ item.genres or '' }}"
-              data-type="{{ item.type or 'movie' }}">
+      <a href="/search?q={{ item.title | urlencode }}&type={{ item.type or 'movie' }}"
+         class="mt-auto text-xs bg-white text-black font-medium py-1.5 rounded-lg hover:bg-gray-200 transition text-center block">
         + Add to Library
-      </button>
-      <div class="add-form hidden"></div>
+      </a>
     </div>
   </div>
   {% endfor %}
@@ -94,55 +88,5 @@
 <p class="text-gray-500">No similar titles found that aren't already in your library.</p>
 {% endif %}
 
-<script>
-document.querySelectorAll('.add-btn').forEach(btn => {
-  btn.addEventListener('click', () => toggleAddForm(btn));
-});
-
-function toggleAddForm(btn) {
-  const formDiv = btn.nextElementSibling;
-  if (!formDiv.classList.contains('hidden')) { formDiv.classList.add('hidden'); return; }
-  formDiv.classList.remove('hidden');
-  const type = btn.dataset.type;
-  formDiv.innerHTML = `
-    <form class="flex flex-col gap-2 mt-1">
-      <input type="hidden" name="tmdb_id" value="${btn.dataset.id}" />
-      <input type="hidden" name="title" value="${btn.dataset.title}" />
-      <input type="hidden" name="type" value="${type}" />
-      <input type="hidden" name="year" value="${btn.dataset.year}" />
-      <input type="hidden" name="poster_url" value="${btn.dataset.poster}" />
-      <input type="hidden" name="genres" value="${btn.dataset.genres}" />
-      <label class="text-xs text-gray-400">Rating (1-10)
-        <input type="number" name="rating" min="1" max="10"
-               class="w-full mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
-      </label>
-      ${type === 'series' ? `<label class="text-xs text-gray-400">Seasons watched (e.g. 1,2,3)
-        <input type="text" name="seasons_watched"
-               class="w-full mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
-      </label>` : '<input type="hidden" name="seasons_watched" value="" />'}
-      <label class="text-xs text-gray-400">Notes
-        <textarea name="notes" rows="2"
-                  class="w-full mt-1 bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-1.5 text-sm focus:outline-none resize-none"></textarea>
-      </label>
-      <button type="submit" class="text-xs bg-white text-black font-medium py-1.5 rounded-lg hover:bg-gray-200 transition">Save</button>
-      <p class="status text-xs text-center"></p>
-    </form>`;
-  formDiv.querySelector('form').addEventListener('submit', e => submitAdd(e, formDiv.querySelector('form')));
-}
-
-async function submitAdd(e, form) {
-  e.preventDefault();
-  const status = form.querySelector('.status');
-  const res = await fetch('/add', { method: 'POST', body: new FormData(form), redirect: 'manual' });
-  if (res.status === 0 || res.ok || res.status === 303) {
-    status.textContent = '✓ Added to library';
-    status.className = 'status text-xs text-center text-green-400';
-    form.querySelectorAll('input,textarea,button[type=submit]').forEach(el => el.disabled = true);
-  } else {
-    status.textContent = 'Already in library.';
-    status.className = 'status text-xs text-center text-red-400';
-  }
-}
-</script>
 
 {% endblock %}

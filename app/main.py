@@ -60,18 +60,21 @@ def library(request: Request, filter: str | None = None, error: str | None = Non
 # ---------------------------------------------------------------------------
 
 @app.get("/search")
-def search(request: Request):
-    return templates.TemplateResponse(request=request, name="search.html", context={})
+def search(request: Request, q: str | None = None, type: str | None = None):
+    return templates.TemplateResponse(
+        request=request, name="search.html",
+        context={"initial_q": q or "", "initial_type": type or "both"},
+    )
 
 
 @app.get("/api/search")
-def api_search(q: str, type: str = "movie"):
-    if type not in ("movie", "series"):
+def api_search(q: str = "", type: str = "both"):
+    if not q.strip():
         return JSONResponse([])
-    result = tmdb.search_title(q, type)
-    if result is None:
-        return JSONResponse([])
-    return JSONResponse([result])
+    if type not in ("movie", "series", "both"):
+        type = "both"
+    results = tmdb.search_titles_multi(q, type, max_results=8)
+    return JSONResponse(results)
 
 
 # ---------------------------------------------------------------------------
