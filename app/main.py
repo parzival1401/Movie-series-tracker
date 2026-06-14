@@ -48,10 +48,18 @@ def library(request: Request, filter: str | None = None, error: str | None = Non
     if filter not in ("movie", "series"):
         filter = None
     items = db.get_all_watched(filter_type=filter)
+    all_genres: set[str] = set()
+    for item in items:
+        if item["genres"]:
+            for g in item["genres"].split(","):
+                genre = g.strip()
+                if genre:
+                    all_genres.add(genre)
+    genres_list = sorted(all_genres)
     return templates.TemplateResponse(
         request=request,
         name="library.html",
-        context={"items": items, "current_filter": filter, "error": error},
+        context={"items": items, "current_filter": filter, "error": error, "genres_list": genres_list},
     )
 
 

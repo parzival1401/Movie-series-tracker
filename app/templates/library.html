@@ -30,8 +30,8 @@
 <!-- Results counter -->
 <p id="results-count" class="text-xs text-gray-500 mb-4"></p>
 
-<!-- Filter bar -->
-<div class="flex gap-2 mb-6 text-sm">
+<!-- Type filter bar -->
+<div class="flex gap-2 mb-4 text-sm">
   <button data-filter="all"
           class="filter-btn px-4 py-1.5 rounded-full border transition border-white/20 text-gray-400 hover:text-white">
     All
@@ -45,6 +45,25 @@
     Series
   </button>
 </div>
+
+<!-- Genre filter bar -->
+{% if genres_list %}
+<div class="flex items-center gap-3 mb-6">
+  <span class="text-xs text-gray-500 flex-none">Genre</span>
+  <div class="flex gap-2 overflow-x-auto flex-1" style="scrollbar-width: none">
+    <button class="genre-pill bg-teal-600 border border-teal-600 text-white text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap"
+            data-genre="all">
+      All Genres
+    </button>
+    {% for genre in genres_list %}
+    <button class="genre-pill bg-[#1a1a1a] border border-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full cursor-pointer whitespace-nowrap hover:border-gray-500 transition"
+            data-genre="{{ genre | lower }}">
+      {{ genre }}
+    </button>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 {% if items %}
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
@@ -130,6 +149,7 @@ const clearBtn = document.getElementById('search-clear');
 const resultsCount = document.getElementById('results-count');
 
 let activeFilter = 'all';
+let activeGenre = 'all';
 
 function filterCards() {
   const query = searchInput.value.toLowerCase().trim();
@@ -140,10 +160,14 @@ function filterCards() {
     const titleMatch = card.dataset.title.includes(query);
     const genreMatch = card.dataset.genres.includes(query);
     const typeMatch = activeFilter === 'all' || card.dataset.type === activeFilter;
-    const show = (titleMatch || genreMatch) && typeMatch;
+
+    const cardGenres = card.dataset.genres.split(',').map(g => g.trim().toLowerCase());
+    const genreFilterMatch = activeGenre === 'all' || cardGenres.includes(activeGenre.toLowerCase());
+
+    const show = (titleMatch || genreMatch) && typeMatch && genreFilterMatch;
     card.style.display = show ? '' : 'none';
     if (show) visible++;
-    if (typeMatch) typeTotal++;
+    if (typeMatch && genreFilterMatch) typeTotal++;
   });
 
   if (noResults) noResults.classList.toggle('hidden', visible > 0);
@@ -161,6 +185,7 @@ function filterCards() {
   const params = new URLSearchParams();
   if (query) params.set('q', query);
   if (activeFilter !== 'all') params.set('type', activeFilter);
+  if (activeGenre !== 'all') params.set('genre', activeGenre);
   const newUrl = params.toString()
     ? `${window.location.pathname}?${params}`
     : window.location.pathname;
@@ -176,6 +201,7 @@ function clearSearch() {
 clearBtn.addEventListener('click', clearSearch);
 searchInput.addEventListener('input', filterCards);
 
+// Type filter buttons
 const filterBtns = document.querySelectorAll('.filter-btn');
 const activeClass = ['bg-teal-500', 'text-black', 'border-teal-500'];
 const inactiveClass = ['border-white/20', 'text-gray-400'];
@@ -193,6 +219,25 @@ function setActiveFilter(btn) {
 
 filterBtns.forEach(btn => {
   btn.addEventListener('click', () => setActiveFilter(btn));
+});
+
+// Genre pill buttons
+const genrePillActive = ['bg-teal-600', 'border-teal-600', 'text-white'];
+const genrePillInactive = ['bg-[#1a1a1a]', 'border-gray-700', 'text-gray-300'];
+
+function setActiveGenre(pill) {
+  document.querySelectorAll('.genre-pill').forEach(p => {
+    p.classList.remove(...genrePillActive);
+    p.classList.add(...genrePillInactive);
+  });
+  pill.classList.remove(...genrePillInactive);
+  pill.classList.add(...genrePillActive);
+  activeGenre = pill.dataset.genre;
+  filterCards();
+}
+
+document.querySelectorAll('.genre-pill').forEach(pill => {
+  pill.addEventListener('click', () => setActiveGenre(pill));
 });
 
 // Keyboard shortcuts
@@ -214,9 +259,25 @@ document.addEventListener('keydown', e => {
 const urlParams = new URLSearchParams(window.location.search);
 const initialQuery = urlParams.get('q') || '';
 const initialFilter = urlParams.get('type') || 'all';
+const initialGenre = urlParams.get('genre') || 'all';
 
 if (initialQuery) searchInput.value = initialQuery;
 
+// Set genre pill from URL
+if (initialGenre !== 'all') {
+  activeGenre = initialGenre;
+  const targetPill = document.querySelector(`.genre-pill[data-genre="${initialGenre}"]`);
+  if (targetPill) {
+    document.querySelectorAll('.genre-pill').forEach(p => {
+      p.classList.remove(...genrePillActive);
+      p.classList.add(...genrePillInactive);
+    });
+    targetPill.classList.remove(...genrePillInactive);
+    targetPill.classList.add(...genrePillActive);
+  }
+}
+
+// Set type filter from URL (also triggers filterCards)
 const targetFilterBtn = document.querySelector(`[data-filter="${initialFilter}"]`);
 setActiveFilter(targetFilterBtn || document.querySelector('[data-filter="all"]'));
 </script>
