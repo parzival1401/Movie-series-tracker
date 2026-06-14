@@ -1,24 +1,23 @@
-import json
 import os
-from datetime import date, timedelta
+import json
+import re
+from datetime import datetime, date, timedelta
 from typing import Callable
 
-from google import genai
-from google.genai import types
+from groq import Groq
 
 _client = None
-_MODEL = "models/gemini-2.0-flash-lite"
+
+TASTE_PROFILE = """
+[I WILL FILL THIS IN — DO NOT CHANGE THIS LINE]
+"""
 
 
 def get_client():
     global _client
     if _client is None:
-        _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        _client = Groq(api_key=os.getenv("GROQ_API_KEY"))
     return _client
-
-TASTE_PROFILE = """
-[I WILL FILL THIS IN — DO NOT CHANGE THIS LINE]
-"""
 
 
 def should_refresh(last_date: str | None) -> bool:
@@ -75,33 +74,37 @@ Each object must have exactly these keys: tmdb_id (integer), title (string), sco
 Order by score descending."""
 
 
-def rerank_recommendations(watched_list: list[dict], candidates: list[dict]) -> list[dict]:
+def rerank_recommendations(watched_list: list[dict], candidates: list[dict]):
+    if not candidates:
+        return []
     try:
         prompt = build_prompt(watched_list, candidates)
-        response = get_client().models.generate_content(
-            model=_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.7,
-                max_output_tokens=2000,
-            ),
-        )
-        text = response.text.strip()
 
-        if text.startswith("```"):
-            text = text.split("\n", 1)[-1]
-            text = text.rsplit("```", 1)[0]
+        response = get_client().chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=2000,
+        )
+
+        text = response.choices[0].message.content
+
+        text = re.sub(r"```json\s*", "", text)
+        text = re.sub(r"```\s*", "", text)
+        text = text.strip()
 
         parsed = json.loads(text)
+
         required = {"tmdb_id", "title", "score", "reason"}
-        validated = [item for item in parsed if required.issubset(item.keys())]
-        return validated
+        valid = [item for item in parsed if required.issubset(item.keys())]
+        return valid
+
     except Exception as e:
         error_str = str(e)
-        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-            print("Gemini quota exceeded — try again later or tomorrow")
+        if "429" in error_str or "rate_limit" in error_str.lower():
+            print(f"Groq rate limit hit: {e}")
             return "quota_exceeded"
-        print(f"Gemini error: {e}")
+        print(f"Groq error: {e}")
         return []
 
 

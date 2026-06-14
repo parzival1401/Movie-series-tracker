@@ -3,6 +3,6 @@ uvicorn
 jinja2
 python-dotenv
 requests
-google-genai
+groq
 python-multipart
 aiofiles
