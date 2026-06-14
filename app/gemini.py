@@ -36,60 +36,41 @@ def build_prompt(
     filter_genre: str | None = None,
     filter_type: str | None = None,
 ) -> str:
-    loved = [w for w in watched_list if w.get("rating") and w["rating"] >= 9]
-    liked = [w for w in watched_list if w.get("rating") and 7 <= w["rating"] <= 8]
-    mixed = [w for w in watched_list if w.get("rating") and w["rating"] <= 6]
+    top_watched = sorted(
+        [w for w in watched_list if w.get("rating")],
+        key=lambda x: x["rating"],
+        reverse=True,
+    )[:20]
 
-    def fmt(w: dict) -> str:
-        parts = f"{w['title']} ({w['type']}) — {w.get('genres', '')}"
-        if w.get("notes"):
-            parts += f" — {w['notes']}"
-        return parts
-
-    loved_lines = "\n".join(f"  {fmt(w)}" for w in loved) or "  (none)"
-    liked_lines = "\n".join(f"  {fmt(w)}" for w in liked) or "  (none)"
-    mixed_lines = "\n".join(f"  {fmt(w)}" for w in mixed) or "  (none)"
-
-    candidate_lines = "\n".join(
-        f"{i+1}. {c['title']} ({c.get('year', '?')}) [{c.get('type', '')}] — {c.get('genres', '')}\n"
-        f"   {c.get('overview', '')}"
-        for i, c in enumerate(candidates[:20])
-    )
+    loved = [w["title"] for w in top_watched if w.get("rating", 0) >= 9]
+    liked = [w["title"] for w in top_watched if w.get("rating", 0) in (7, 8)]
 
     filter_context = ""
     if filter_genre or filter_type:
         parts = []
         if filter_type:
-            parts.append(f"type: {filter_type}")
+            parts.append(filter_type)
         if filter_genre:
-            parts.append(f"genre: {filter_genre}")
-        filter_context = f"""
-ACTIVE FILTERS: The user specifically wants recommendations filtered by {' and '.join(parts)}.
-Prioritize candidates that match these filters.
-Only recommend titles that match the filter criteria.
-"""
+            parts.append(filter_genre)
+        filter_context = f"FILTER: Only recommend {' '.join(parts)} titles.\n"
 
-    return f"""You are a recommendation engine. Rerank the 20 candidate titles below for this user.
+    candidates_text = "\n".join(
+        f"{i+1}. [{c.get('tmdb_id')}] {c.get('title', '')} "
+        f"({c.get('year', '')}) {(c.get('genres') or '')[:40]} — "
+        f"{(c.get('overview') or '')[:60]}"
+        for i, c in enumerate(candidates[:15])
+    )
 
-USER'S WATCH HISTORY:
-Loved (9-10):
-{loved_lines}
+    return f"""Movie recommender. {filter_context}
+User loved: {', '.join(loved[:10])}
+User liked: {', '.join(liked[:10])}
+Taste: {TASTE_PROFILE.strip()[:200]}
 
-Liked (7-8):
-{liked_lines}
+Rate these candidates (return top 8 as JSON only):
+{candidates_text}
 
-Mixed (1-6):
-{mixed_lines}
-
-TASTE PROFILE:
-{TASTE_PROFILE.strip()}
-{filter_context}
-CANDIDATES:
-{candidate_lines}
-
-Return ONLY a JSON array of the top 10 recommendations, no markdown, no explanation outside JSON.
-Each object must have exactly these keys: tmdb_id (integer), title (string), score (float 0-10), reason (string, one sentence max).
-Order by score descending."""
+JSON array, no markdown:
+[{{"tmdb_id":int,"title":"str","score":float,"reason":"max 10 words"}}]"""
 
 
 def rerank_recommendations(
@@ -186,5 +167,5 @@ def aggregate_tmdb_recs(
             if filter_genre.lower() in genres:
                 scored[cid] *= 2.0
 
-    top = sorted(scored.items(), key=lambda x: x[1], reverse=True)[:20]
+    top = sorted(scored.items(), key=lambda x: x[1], reverse=True)[:15]
     return [scored_meta[cid] for cid, _ in top]

@@ -279,7 +279,7 @@ def recommendations_refresh(
     genre: str | None = Form(None),
     type: str | None = Form(None),
 ):
-    _build_and_save_recs(filter_genre=genre, filter_type=type)
+    _build_and_save_recs(genre=genre, type=type)
     params = []
     if genre:
         params.append(f"genre={genre}")
