@@ -56,15 +56,41 @@ def _map_result(item: dict, media_type: str) -> dict:
     }
 
 
-def search_title(name: str, media_type: str) -> dict | None:
+def _search_endpoint(query: str, media_type: str) -> dict | None:
     endpoint = "movie" if media_type == "movie" else "tv"
-    data = _get(f"{_BASE}/search/{endpoint}", params={"query": name, "page": 1})
+    data = _get(f"{_BASE}/search/{endpoint}", params={"query": query, "page": 1})
     if not data:
         return None
     results = data.get("results", [])
     if not results:
         return None
-    return _map_result(results[0], media_type)
+    result = _map_result(results[0], media_type)
+    result["source"] = "tmdb"
+    return result
+
+
+def smart_search_tmdb(title: str, media_type: str) -> dict | None:
+    # Strategy 1: exact title, correct media_type
+    result = _search_endpoint(title, media_type)
+    if result:
+        return result
+
+    # Strategy 2: strip subtitle after colon
+    if ":" in title:
+        time.sleep(0.25)
+        after_colon = title.split(":", 1)[1].strip()
+        result = _search_endpoint(after_colon, media_type)
+        if result:
+            return result
+
+    # Strategy 3: flip media_type
+    time.sleep(0.25)
+    alt_type = "series" if media_type == "movie" else "movie"
+    return _search_endpoint(title, alt_type)
+
+
+def search_title(name: str, media_type: str) -> dict | None:
+    return smart_search_tmdb(name, media_type)
 
 
 def get_recommendations(tmdb_id: int, media_type: str) -> list[dict]:
