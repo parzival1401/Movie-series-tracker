@@ -2,6 +2,26 @@
 {% block title %}Similar — MovieRec{% endblock %}
 {% block content %}
 
+{% macro provider_logos(p) %}
+{% if p and p.stream %}
+<div class="flex flex-wrap gap-1 items-center mt-2">
+  {% for svc in p.stream %}
+  {% if p.link %}
+  <a href="{{ p.link }}" target="_blank" rel="noopener" title="{{ svc.provider_name }}">
+    <img src="{{ svc.logo_path }}" alt="{{ svc.provider_name }}"
+         class="w-8 h-8 rounded-md opacity-90 hover:opacity-100 transition" />
+  </a>
+  {% else %}
+  <img src="{{ svc.logo_path }}" alt="{{ svc.provider_name }}" title="{{ svc.provider_name }}"
+       class="w-8 h-8 rounded-md opacity-90" />
+  {% endif %}
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-xs text-gray-600 mt-2">Not available for streaming</p>
+{% endif %}
+{% endmacro %}
+
 <!-- Source hero -->
 {% if source_title %}
 <div class="flex gap-5 mb-10 items-start">
@@ -23,8 +43,9 @@
     <p class="text-sm italic text-gray-500 mb-2">"{{ source_title.tagline }}"</p>
     {% endif %}
     {% if source_title.overview %}
-    <p class="text-sm text-gray-400 leading-relaxed max-w-xl">{{ source_title.overview }}</p>
+    <p class="text-sm text-gray-400 leading-relaxed max-w-xl mb-2">{{ source_title.overview }}</p>
     {% endif %}
+    {{ provider_logos(source_providers) }}
   </div>
 </div>
 {% endif %}
@@ -36,6 +57,7 @@
 {% if results %}
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
   {% for item in results %}
+  {% set p = providers.get(item.tmdb_id, {}) %}
   <div class="bg-[#1a1a1a] rounded-xl border border-white/10 overflow-hidden flex flex-col">
 
     {% if item.poster_url %}
@@ -51,6 +73,8 @@
       <p class="font-semibold text-sm leading-tight">{{ item.title }}</p>
       <p class="text-xs text-gray-500">{{ item.year or '' }}</p>
       {% if item.genres %}<p class="text-xs text-gray-500">{{ item.genres }}</p>{% endif %}
+
+      {{ provider_logos(p) }}
 
       <button class="add-btn mt-auto text-xs bg-white text-black font-medium py-1.5 rounded-lg hover:bg-gray-200 transition"
               data-id="{{ item.tmdb_id }}"

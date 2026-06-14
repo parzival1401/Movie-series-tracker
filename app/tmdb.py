@@ -5,7 +5,10 @@ import requests
 _BASE = "https://api.themoviedb.org/3"
 _POSTER_BASE = "https://image.tmdb.org/t/p/w300"
 
+_LOGO_BASE = "https://image.tmdb.org/t/p/w45"
+
 _genre_cache: dict[str, dict[int, str]] = {"movie": {}, "series": {}}
+_provider_cache: dict[tuple, dict] = {}
 
 
 def _headers() -> dict:
@@ -81,6 +84,43 @@ def get_recommendations(tmdb_id: int, media_type: str) -> list[dict]:
                     seen_ids.add(item["id"])
 
     return [_map_result(item, media_type) for item in results[:20]]
+
+
+def get_watch_providers(tmdb_id: int, media_type: str, country_code: str | None = None) -> dict:
+    if country_code is None:
+        country_code = os.getenv("WATCH_PROVIDER_COUNTRY", "US")
+    cache_key = (tmdb_id, media_type, country_code)
+    if cache_key in _provider_cache:
+        return _provider_cache[cache_key]
+
+    empty = {"stream": [], "rent": [], "buy": [], "link": None}
+    endpoint = "movie" if media_type == "movie" else "tv"
+    time.sleep(0.25)
+    data = _get(f"{_BASE}/{endpoint}/{tmdb_id}/watch/providers")
+    if not data:
+        _provider_cache[cache_key] = empty
+        return empty
+
+    country = data.get("results", {}).get(country_code, {})
+    if not country:
+        _provider_cache[cache_key] = empty
+        return empty
+
+    def _extract(key: str) -> list[dict]:
+        return [
+            {"provider_name": p["provider_name"], "logo_path": f"{_LOGO_BASE}{p['logo_path']}"}
+            for p in country.get(key, [])
+            if p.get("logo_path")
+        ]
+
+    result = {
+        "stream": _extract("flatrate"),
+        "rent": _extract("rent"),
+        "buy": _extract("buy"),
+        "link": country.get("link"),
+    }
+    _provider_cache[cache_key] = result
+    return result
 
 
 def get_details(tmdb_id: int, media_type: str) -> dict | None:

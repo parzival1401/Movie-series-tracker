@@ -123,10 +123,17 @@ def similar(request: Request, tmdb_id: int, media_type: str):
     results = tmdb.get_recommendations(tmdb_id, media_type)
     results = [r for r in results if r["tmdb_id"] not in watched_ids]
     source = tmdb.get_details(tmdb_id, media_type) or {}
+    source_providers = tmdb.get_watch_providers(tmdb_id, media_type)
+    providers = {r["tmdb_id"]: tmdb.get_watch_providers(r["tmdb_id"], media_type) for r in results}
     return templates.TemplateResponse(
         request=request,
         name="similar.html",
-        context={"source_title": source, "results": results},
+        context={
+            "source_title": source,
+            "source_providers": source_providers,
+            "results": results,
+            "providers": providers,
+        },
     )
 
 
@@ -154,10 +161,14 @@ def recommendations(request: Request):
         _build_and_save_recs()
     recs = db.get_recommendations()
     last_date = db.get_last_rec_date()
+    providers = {
+        rec["tmdb_id"]: tmdb.get_watch_providers(rec["tmdb_id"], rec["type"])
+        for rec in recs if rec.get("tmdb_id") and rec.get("type")
+    }
     return templates.TemplateResponse(
         request=request,
         name="recommendations.html",
-        context={"recs": recs, "last_date": last_date},
+        context={"recs": recs, "last_date": last_date, "providers": providers},
     )
 
 
