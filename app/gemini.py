@@ -9,7 +9,15 @@ from groq import Groq
 _client = None
 
 TASTE_PROFILE = """
-[I WILL FILL THIS IN — DO NOT CHANGE THIS LINE]
+I watch a mix of anime and western content.
+
+For anime: I love romance, slice-of-life, action shonen, and psychological series. Top favorites include Steins;Gate, Assassination Classroom, Frieren, Chainsaw Man, Angel Beats, Plastic Memories, Erased, and Your Lie in April.
+
+For western content: I enjoy sci-fi, dystopian, time-travel, puzzle-thrillers, and animated series. Top favorites include Dark, Alice in Borderland, Arcane, Bojack Horseman, Gravity Falls, Star Wars series, and Dune.
+
+For movies: I enjoy action, adventure, superhero, animated Disney/Pixar, Spider-Man films, Star Wars, and emotional sci-fi like Soul and Wall-E.
+
+I rate things I genuinely enjoy 9-10, solid watches 7-8, and disappointing ones below 7.
 """
 
 
@@ -99,7 +107,20 @@ def rerank_recommendations(
         parsed = json.loads(text)
         required = {"tmdb_id", "title", "score", "reason"}
         valid = [item for item in parsed if required.issubset(item.keys())]
-        return valid
+
+        candidate_meta = {c["tmdb_id"]: c for c in candidates if c.get("tmdb_id")}
+        enriched = []
+        for item in valid:
+            meta = candidate_meta.get(item["tmdb_id"], {})
+            enriched.append({
+                **item,
+                "type": meta.get("type") or filter_type or "movie",
+                "year": meta.get("year"),
+                "poster_url": meta.get("poster_url"),
+                "genres": meta.get("genres") or "",
+                "overview": meta.get("overview") or "",
+            })
+        return enriched
 
     except Exception as e:
         error_str = str(e)
