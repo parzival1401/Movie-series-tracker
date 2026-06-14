@@ -17,7 +17,7 @@
 {% endif %}
 
 <!-- Search bar -->
-<div class="relative mb-3">
+<div class="relative mb-1">
   <input id="library-search" type="text" placeholder="Search your library..."
          autofocus autocomplete="off"
          class="w-full bg-[#1a1a1a] border border-gray-700 text-white rounded-lg px-4 py-2 pr-9 text-sm focus:outline-none focus:border-gray-500" />
@@ -25,6 +25,7 @@
           class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-lg leading-none transition"
           aria-label="Clear search">×</button>
 </div>
+<p class="hidden sm:block text-xs text-gray-600 mb-3">Press / to search · Esc to clear</p>
 
 <!-- Results counter -->
 <p id="results-count" class="text-xs text-gray-500 mb-4"></p>
@@ -127,7 +128,6 @@ const cards = document.querySelectorAll('.title-card');
 const noResults = document.getElementById('no-results');
 const clearBtn = document.getElementById('search-clear');
 const resultsCount = document.getElementById('results-count');
-const totalCards = cards.length;
 
 let activeFilter = 'all';
 
@@ -156,6 +156,15 @@ function filterCards() {
       resultsCount.textContent = `${typeTotal} title${typeTotal !== 1 ? 's' : ''}`;
     }
   }
+
+  // Sync URL state
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (activeFilter !== 'all') params.set('type', activeFilter);
+  const newUrl = params.toString()
+    ? `${window.location.pathname}?${params}`
+    : window.location.pathname;
+  history.replaceState({}, '', newUrl);
 }
 
 function clearSearch() {
@@ -164,13 +173,8 @@ function clearSearch() {
   searchInput.focus();
 }
 
-if (clearBtn) {
-  clearBtn.addEventListener('click', clearSearch);
-}
-
-if (searchInput) {
-  searchInput.addEventListener('input', filterCards);
-}
+clearBtn.addEventListener('click', clearSearch);
+searchInput.addEventListener('input', filterCards);
 
 const filterBtns = document.querySelectorAll('.filter-btn');
 const activeClass = ['bg-teal-500', 'text-black', 'border-teal-500'];
@@ -191,9 +195,30 @@ filterBtns.forEach(btn => {
   btn.addEventListener('click', () => setActiveFilter(btn));
 });
 
-// Init: activate All button and set initial count
-const allBtn = document.querySelector('[data-filter="all"]');
-if (allBtn) setActiveFilter(allBtn);
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement.tagName;
+  const inField = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable;
+
+  if (e.key === '/' && !inField) {
+    e.preventDefault();
+    searchInput.focus();
+  }
+
+  if (e.key === 'Escape' && document.activeElement === searchInput) {
+    clearSearch();
+  }
+});
+
+// Restore state from URL on load
+const urlParams = new URLSearchParams(window.location.search);
+const initialQuery = urlParams.get('q') || '';
+const initialFilter = urlParams.get('type') || 'all';
+
+if (initialQuery) searchInput.value = initialQuery;
+
+const targetFilterBtn = document.querySelector(`[data-filter="${initialFilter}"]`);
+setActiveFilter(targetFilterBtn || document.querySelector('[data-filter="all"]'));
 </script>
 
 {% endblock %}
