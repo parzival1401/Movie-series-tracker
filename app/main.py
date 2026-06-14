@@ -115,6 +115,19 @@ def add_watched(
         )
     except ValueError:
         return RedirectResponse("/library?error=duplicate", status_code=303)
+    runtime_data = tmdb.get_runtime_and_seasons(tmdb_id, type)
+    if runtime_data["runtime"] or runtime_data["total_seasons"]:
+        with db._connect() as conn:
+            conn.execute(
+                """UPDATE watched SET
+                   runtime = ?,
+                   total_seasons = ?,
+                   episodes_per_season = ?
+                   WHERE tmdb_id = ?""",
+                (runtime_data["runtime"], runtime_data["total_seasons"],
+                 runtime_data["episodes_per_season"], tmdb_id),
+            )
+            conn.commit()
     return RedirectResponse("/library", status_code=303)
 
 
