@@ -29,6 +29,15 @@ def init_db() -> None:
                 notes           TEXT
             )
         """)
+        for col, definition in [
+            ("source",      "TEXT DEFAULT 'tmdb'"),
+            ("external_id", "INTEGER"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE watched ADD COLUMN {col} {definition}")
+            except sqlite3.OperationalError:
+                pass
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS recommendations (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,6 +67,8 @@ def add_watched(
     rating: int | None,
     seasons_watched: str | None,
     notes: str | None,
+    source: str = "tmdb",
+    external_id: int | None = None,
 ) -> int:
     with _connect() as conn:
         existing = conn.execute(
@@ -68,12 +79,13 @@ def add_watched(
         cursor = conn.execute(
             """
             INSERT INTO watched
-                (title, type, tmdb_id, year, poster_url, genres, rating, seasons_watched, date_added, notes)
+                (title, type, tmdb_id, year, poster_url, genres, rating, seasons_watched,
+                 date_added, notes, source, external_id)
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (title, type, tmdb_id, year, poster_url, genres, rating, seasons_watched,
-             date.today().isoformat(), notes),
+             date.today().isoformat(), notes, source, external_id),
         )
         conn.commit()
         return cursor.lastrowid
