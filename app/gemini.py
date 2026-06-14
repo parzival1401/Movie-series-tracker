@@ -116,27 +116,33 @@ def aggregate_tmdb_recs(
     filter_genre: str | None = None,
     filter_type: str | None = None,
 ) -> list[dict]:
-    # Seed titles: filter by type if requested, fall back to all if too few
-    seed_titles = watched_list
+    all_valid = [w for w in watched_list if w.get("tmdb_id") and w.get("rating")]
+
     if filter_type:
-        type_filtered = [w for w in seed_titles if w.get("type", "").lower() == filter_type.lower()]
-        if len(type_filtered) >= 5:
-            seed_titles = type_filtered
+        type_seeds = [w for w in all_valid if w.get("type", "").lower() == filter_type.lower()]
+        seed_pool = type_seeds if len(type_seeds) >= 5 else all_valid
+    else:
+        seed_pool = all_valid
 
     if filter_genre:
-        genre_seeds = [
-            w for w in seed_titles
-            if w.get("genres") and filter_genre.lower() in w["genres"].lower()
-        ]
-        other_seeds = [w for w in seed_titles if w not in genre_seeds]
-        seed_titles = (genre_seeds + other_seeds)
+        genre_seeds = sorted(
+            [w for w in seed_pool if filter_genre.lower() in (w.get("genres") or "").lower()],
+            key=lambda x: x["rating"],
+            reverse=True,
+        )[:20]
+        if len(genre_seeds) < 5:
+            other = sorted(
+                [w for w in seed_pool if w not in genre_seeds],
+                key=lambda x: x["rating"],
+                reverse=True,
+            )[:10]
+            seed_titles = genre_seeds + other
+        else:
+            seed_titles = genre_seeds
+    else:
+        seed_titles = sorted(seed_pool, key=lambda x: x["rating"], reverse=True)[:30]
 
-    # Sort by rating within each group, cap at 30
-    seed_titles = sorted(
-        [w for w in seed_titles if w.get("tmdb_id") and w.get("rating")],
-        key=lambda x: x["rating"],
-        reverse=True,
-    )[:30]
+    print(f"Using {len(seed_titles)} seed titles for aggregation")
 
     scored: dict[int, float] = {}
     scored_meta: dict[int, dict] = {}
@@ -144,6 +150,8 @@ def aggregate_tmdb_recs(
     for title in seed_titles:
         candidates = get_recommendations_fn(title["tmdb_id"], title.get("type", "movie"))
         weight = (title["rating"] or 5) / 10.0
+        if filter_genre and filter_genre.lower() in (title.get("genres") or "").lower():
+            weight *= 1.5
         for c in candidates:
             cid = c.get("tmdb_id")
             if not cid:
@@ -153,19 +161,13 @@ def aggregate_tmdb_recs(
                 scored_meta[cid] = c
             scored[cid] += weight
 
-    # Apply type filter to candidates
-    if filter_type:
-        scored = {
-            cid: s for cid, s in scored.items()
-            if scored_meta[cid].get("type", "").lower() == filter_type.lower()
-        }
-
-    # Boost genre-matching candidates rather than excluding non-matches
+    # Boost genre-matching candidates; no hard type filter (TMDB type field unreliable)
     if filter_genre:
-        for cid in scored:
-            genres = (scored_meta[cid].get("genres") or "").lower()
-            if filter_genre.lower() in genres:
+        for cid in list(scored.keys()):
+            if filter_genre.lower() in (scored_meta[cid].get("genres") or "").lower():
                 scored[cid] *= 2.0
 
     top = sorted(scored.items(), key=lambda x: x[1], reverse=True)[:15]
-    return [scored_meta[cid] for cid, _ in top]
+    result = [scored_meta[cid] for cid, _ in top]
+    print(f"Final candidates: {len(result)}")
+    return result
